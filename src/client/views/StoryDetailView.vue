@@ -81,6 +81,28 @@ function toggleFiles(sha: string) {
 }
 function scoreLabel(score: number) { return Math.round(score * 100) + '%' }
 
+// ─── Match explainability ───
+// SignalBreakdown is computed and persisted per commit but was never surfaced.
+const expandedSignals = ref<Set<string>>(new Set())
+function toggleSignals(sha: string) {
+  const next = new Set(expandedSignals.value)
+  if (next.has(sha)) { next.delete(sha) } else { next.add(sha) }
+  expandedSignals.value = next
+}
+const SIGNAL_LABELS: { key: keyof CommitMapping['signalBreakdown']; label: string }[] = [
+  { key: 'embedding', label: 'Embedding' },
+  { key: 'storyIdMatch', label: 'Story ID' },
+  { key: 'keyword', label: 'Keyword' },
+  { key: 'pathOverlap', label: 'Path' },
+  { key: 'nli', label: 'NLI' },
+  { key: 'diffSignal', label: 'Diff' },
+]
+function signalRows(c: CommitMapping) {
+  const b = c.signalBreakdown
+  if (!b) return []
+  return SIGNAL_LABELS.map(({ key, label }) => ({ label, value: Number(b[key] ?? 0) }))
+}
+
 // ─── Tab state ───
 const activeTab = ref<'requirements' | 'visualizer'>('requirements')
 const markdownSource = ref('')
@@ -159,6 +181,16 @@ watch(storyId, () => {
         <span class="meta-badge">Epic {{ epicId }}</span>
         <span class="meta-sep">·</span>
         <span class="meta-badge">Story {{ storyId }}</span>
+        <span
+          v-if="story.rawStatus"
+          class="meta-badge raw-status"
+          :title="`Raw BMAD status (source: ${story.statusSource ?? 'file'})`"
+        >{{ story.rawStatus }}</span>
+        <span
+          v-if="story.statusConflict"
+          class="meta-badge conflict"
+          title="sprint-status.yaml and the story file disagree on this story's status"
+        >⚠ status drift</span>
       </div>
 
       <!-- Title -->
@@ -272,12 +304,29 @@ watch(storyId, () => {
             <span class="commit-sha">{{ shortSha(c.sha) }}<span class="commit-score">{{ scoreLabel(c.score) }}</span></span>
             <span class="commit-msg">{{ c.message }}</span>
             <span class="commit-date">{{ formatDate(c.date) }}</span>
-            <button
-              class="commit-files-toggle"
-              @click="toggleFiles(c.sha)"
-            >{{ expandedCommits.has(c.sha) ? '▾' : '▸' }} Files ({{ c.files.length }})</button>
+            <div class="commit-toggles">
+              <button
+                class="commit-files-toggle"
+                @click="toggleFiles(c.sha)"
+              >{{ expandedCommits.has(c.sha) ? '▾' : '▸' }} Files ({{ c.files.length }})</button>
+              <button
+                v-if="c.signalBreakdown"
+                class="commit-files-toggle"
+                @click="toggleSignals(c.sha)"
+                title="Why did this commit match?"
+              >{{ expandedSignals.has(c.sha) ? '▾' : '▸' }} Why?</button>
+            </div>
             <ul class="commit-files" v-show="expandedCommits.has(c.sha)">
               <li v-for="f in c.files" :key="f" class="commit-file">{{ f }}</li>
+            </ul>
+            <ul class="signal-list" v-show="expandedSignals.has(c.sha)">
+              <li v-for="s in signalRows(c)" :key="s.label" class="signal-row">
+                <span class="signal-label">{{ s.label }}</span>
+                <span class="signal-bar-track">
+                  <span class="signal-bar-fill" :style="{ width: `${Math.round(s.value * 100)}%` }" />
+                </span>
+                <span class="signal-value">{{ s.value.toFixed(2) }}</span>
+              </li>
             </ul>
           </li>
         </ul>
@@ -406,6 +455,19 @@ watch(storyId, () => {
   opacity: 0.8;
 }
 
+.meta-badge.raw-status {
+  color: var(--text-2);
+  background: var(--bg-2);
+  border-color: var(--border);
+}
+
+.meta-badge.conflict {
+  color: var(--review);
+  background: var(--review-bg);
+  border-color: var(--review);
+  opacity: 1;
+}
+
 .meta-sep {
   color: var(--text-3);
   font-size: 0.75rem;
@@ -522,6 +584,29 @@ watch(storyId, () => {
   transition: color 0.15s;
 }
 .commit-files-toggle:hover { color: var(--text-2); }
+
+.commit-toggles { display: flex; gap: 0.75rem; }
+
+/* ─── Match signal breakdown ─── */
+.signal-list {
+  list-style: none;
+  margin: 0.35rem 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.signal-row { display: flex; align-items: center; gap: 6px; font-size: 0.66rem; }
+.signal-label { color: var(--text-3); width: 4.6em; flex-shrink: 0; }
+.signal-bar-track {
+  flex: 1;
+  height: 3px;
+  background: var(--bg-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.signal-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.signal-value { color: var(--text-2); font-family: var(--font-mono); width: 2.4em; text-align: right; }
 
 .commit-files {
   list-style: none;

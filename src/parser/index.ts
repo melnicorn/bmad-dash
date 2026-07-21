@@ -12,6 +12,7 @@ import type {
 import { resolveBmadConfig } from "./config.js";
 import { loadSprintStatus, writeSprintStatusEntry } from "./sprint-status.js";
 import { parseDocuments } from "./documents.js";
+import { computeNextStep, computeRisks } from "./next-steps.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -633,6 +634,8 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
     config,
     sprintStatus: sprintStatus ?? undefined,
     documents,
+    nextStep: computeNextStep(sprintStatus),
+    risks: computeRisks(sprintStatus, epics),
     frMap: frMap.length ? frMap : undefined,
   };
 }

@@ -2,7 +2,7 @@ import express from "express";
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync, readFileSync } from 'fs'
-import { parseBmadProject, updateStoryStatus, toggleAcceptanceCriteria, toggleTask, BOARD_COLUMNS } from "../parser/index.js";
+import { parseBmadProject, updateStoryStatus, updateEpicStatus, toggleAcceptanceCriteria, toggleTask, BOARD_COLUMNS } from "../parser/index.js";
 import type { BmadProject } from "../types/index.js";
 import type { BoardStatus } from "../parser/index.js";
 
@@ -27,7 +27,10 @@ export function createServer(project: BmadProject, port: number, devSrcDir?: str
     })
   })
 
-  app.get("/api/project", (_req, res) => res.json(project));
+  // Returns the same lean payload as the injected data / SSE. Notably omits
+  // `raw` (every parsed file's contents — multiple MB on a real project);
+  // document bodies are served on demand by /api/document instead.
+  app.get("/api/project", (_req, res) => res.json(buildPayload(project)));
   app.get("/api/epics", (_req, res) => res.json(project.epics));
   app.get("/api/epics/:id", (req, res) => {
     const epic = project.epics.find((e) => e.id === req.params.id);
@@ -67,6 +70,16 @@ export function createServer(project: BmadProject, port: number, devSrcDir?: str
     } catch {
       return res.status(404).json({ error: "File not found" });
     }
+  });
+
+  const EPIC_STATUSES = ["backlog", "in-progress", "done"];
+  app.patch("/api/epics/:epicId/status", (req, res) => {
+    const { status } = req.body as { status: string };
+    if (!EPIC_STATUSES.includes(status))
+      return res.status(400).json({ error: "Invalid epic status" });
+    const result = updateEpicStatus(project, req.params.epicId, status);
+    if (!result.ok) return res.status(404).json({ error: result.error });
+    res.json({ ok: true });
   });
 
   app.patch("/api/epics/:epicId/stories/:storyId/status", (req, res) => {
@@ -167,7 +180,10 @@ export function createServer(project: BmadProject, port: number, devSrcDir?: str
   }
 
   if (existsSync(publicDir)) {
-    app.use(express.static(publicDir))
+    // index:false so "/" falls through to the SPA handler below, which injects
+    // __INITIAL_DATA__. Without it express.static would serve index.html
+    // directly and the client would have to round-trip to /api/project.
+    app.use(express.static(publicDir, { index: false }))
     app.get('*', (_req, res) => {
       res.setHeader('Content-Type', 'text/html')
       res.send(serveHtml(project))

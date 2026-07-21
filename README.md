@@ -22,10 +22,12 @@ Run from your project root. It reads your BMAD install config to locate artifact
 
 ## Features
 
+- **Next steps** — Tells you what to do next using BMAD's own recommendation ladder (in-progress → review → ready-for-dev → backlog → retrospective), with a copyable workflow command and risk warnings (stale sprint status, orphaned stories, status drift)
 - **Epic overview** — Grid of all epics with story counts, status, and progress
+- **Epic board** — Project-level Backlog / In Progress / Done board driven by `sprint-status.yaml`, with story rollups and blocking-dependency badges
 - **Kanban board** — Stories in 4 columns: To Do → Active → Review → Done
-- **Drag & drop** — Move stories between columns; writes status back to the `.md` file **and** `sprint-status.yaml`
-- **Story detail** — Acceptance criteria, tasks with checkboxes, progress ring, related commits
+- **Drag & drop** — Move stories or epics between columns; writes status back to the `.md` file **and** `sprint-status.yaml`
+- **Story detail** — Acceptance criteria, tasks with checkboxes, progress ring, related commits with a "why did this match?" signal breakdown
 - **Documents browser** — Browse and read every BMAD document, grouped by type and initiative, with a table of contents and rendered Markdown — no more opening raw files
 - **Cross-linking** — Follow a document's `inputDocuments` graph (upstream inputs and downstream "used by" backlinks), jump from an epic to its dependencies and requirements, and click through internal `.md` links in-app
 - **Filtering** — Hide completed epics or stories and text-filter across the sidebar, overview, and boards (persisted across sessions)

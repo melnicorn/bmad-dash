@@ -39,6 +39,23 @@ export const useProjectStore = defineStore('project', {
     selectEpic(epicId: string) {
       this.selectedEpicId = epicId
     },
+    /** Epic status lives only in sprint-status.yaml; optimistic with rollback. */
+    async updateEpicStatus(epicId: string, status: string): Promise<void> {
+      const epic = this.project?.epics.find(e => e.id === epicId)
+      if (!epic) return
+      const previous = epic.status
+      epic.status = status
+      try {
+        const res = await fetch(`/api/epics/${encodeURIComponent(epicId)}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        })
+        if (!res.ok) epic.status = previous
+      } catch {
+        epic.status = previous
+      }
+    },
     async updateStoryStatus(epicId: string, storyId: string, status: string): Promise<void> {
       // ─── Optimistic Update ───
       const epic = this.project?.epics.find(e => e.id === epicId)

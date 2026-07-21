@@ -5,6 +5,9 @@
       <button class="nav-link" :class="{ active: isOverviewActive }" @click="goTo('overview')">
         <span class="nav-ico">▚</span> Overview
       </button>
+      <button class="nav-link" :class="{ active: route.name === 'epicBoard' }" @click="goTo('epicBoard')">
+        <span class="nav-ico">▦</span> Epic Board
+      </button>
       <button class="nav-link" :class="{ active: route.name === 'docs' }" @click="goTo('docs')">
         <span class="nav-ico">📄</span> Documents
         <span v-if="store.documents.length" class="nav-count">{{ store.documents.length }}</span>

@@ -5,6 +5,11 @@
       <p class="page-subtitle">{{ store.project?.name }}</p>
     </div>
 
+    <!-- Next Step -->
+    <div class="section">
+      <NextStepsPanel />
+    </div>
+
     <!-- Summary Cards -->
     <div class="section">
       <div class="cards-grid">
@@ -113,6 +118,7 @@ import { useRouter } from 'vue-router'
 import { useProjectStore } from '../stores/project'
 import { useFilterStore } from '../stores/filters'
 import { EPIC_COLUMNS } from '../constants/columns'
+import NextStepsPanel from '../components/NextStepsPanel.vue'
 import type { Task } from '../../types/index'
 
 const store = useProjectStore()

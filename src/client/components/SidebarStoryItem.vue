@@ -10,6 +10,11 @@
       :style="{ backgroundColor: `var(--${story.status ?? 'todo'})` }"
     ></span>
     <span class="story-title"><span class="item-id">{{ story.id }} ·</span> {{ story.title }}</span>
+    <span
+      v-if="story.statusConflict"
+      class="drift-flag"
+      title="sprint-status.yaml and the story file disagree on this story's status"
+    >⚠</span>
   </div>
 </template>
 
@@ -29,6 +34,13 @@ defineEmits<{
 </script>
 
 <style scoped>
+.drift-flag {
+  margin-left: auto;
+  color: var(--review);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
 .story-item {
   display: flex;
   align-items: center;
