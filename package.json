@@ -1,6 +1,6 @@
 {
   "name": "bmad-dash",
-  "version": "2.2.0",
+  "version": "0.0.1",
   "description": "Visualize BMAD Method epics, stories & documents with AI-powered git commit matching",
   "type": "module",
   "main": "dist/cli.js",
