@@ -1,7 +1,7 @@
 <template>
   <div class="app-layout">
     <header class="top-bar">
-      <span class="top-bar-brand">BMAD-VISIO</span>
+      <span class="top-bar-brand">BMAD-DASH</span>
     </header>
     <aside class="sidebar">
       <SidebarTree />

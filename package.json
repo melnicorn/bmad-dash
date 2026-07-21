@@ -1,14 +1,15 @@
 {
-  "name": "bmad-visio",
+  "name": "bmad-dash",
   "version": "2.2.0",
-  "description": "Visualize BMAD Method epics & user stories with AI-powered git commit matching",
+  "description": "Visualize BMAD Method epics, stories & documents with AI-powered git commit matching",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
-    "bmad-visio": "dist/cli.js"
+    "bmad-dash": "dist/cli.js"
   },
   "files": [
     "dist",
+    "screenshots",
     "README.md",
     "LICENSE"
   ],
@@ -23,10 +24,14 @@
   },
   "keywords": [
     "bmad",
+    "bmad-method",
     "dashboard",
     "agile",
     "user-stories",
+    "epics",
     "kanban",
+    "documents",
+    "prd",
     "project-management",
     "transformers-js",
     "embeddings",
@@ -38,9 +43,16 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/williammesi/bmad-visio"
+    "url": "git+https://github.com/melnicorn/bmad-dash.git"
   },
-  "author": "William Mesiti",
+  "homepage": "https://github.com/melnicorn/bmad-dash#readme",
+  "bugs": {
+    "url": "https://github.com/melnicorn/bmad-dash/issues"
+  },
+  "author": "Chris Melnick",
+  "contributors": [
+    "William Mesiti (original bmad-visio author)"
+  ],
   "license": "MIT",
   "dependencies": {
     "chokidar": "^5.0.0",
@@ -56,7 +68,8 @@
     "simple-git": "^3.33.0",
     "unified": "^11.0.5",
     "vue": "^3.5.30",
-    "vue-router": "^5.0.3"
+    "vue-router": "^5.0.3",
+    "yaml": "^2.9.0"
   },
   "optionalDependencies": {
     "@huggingface/transformers": "^3.8.1"

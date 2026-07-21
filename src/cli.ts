@@ -11,10 +11,10 @@ const args = process.argv.slice(2);
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log(`
-  bmad-visio — Visualize BMAD epics, stories & git history
+  bmad-dash — Visualize BMAD epics, stories, docs & git history
 
   Usage:
-    npx bmad-visio [path] [options]
+    npx bmad-dash [path] [options]
 
   Arguments:
     path              Project root (default: .)

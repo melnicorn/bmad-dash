@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectStore } from '../stores/project'
 import type { CommitMapping } from '../../types/index'
-import { renderMarkdown } from '../utils/markdown'
+import MarkdownPane from '../components/MarkdownPane.vue'
 
 // ─── Route + Store ───
 const route = useRoute()
@@ -83,7 +83,7 @@ function scoreLabel(score: number) { return Math.round(score * 100) + '%' }
 
 // ─── Tab state ───
 const activeTab = ref<'requirements' | 'visualizer'>('requirements')
-const markdownHtml = ref('')
+const markdownSource = ref('')
 const markdownLoading = ref(false)
 const markdownError = ref('')
 
@@ -118,14 +118,13 @@ function filterMarkdown(md: string): string {
 }
 
 async function loadMarkdown() {
-  if (markdownHtml.value) return  // already loaded for this story
+  if (markdownSource.value) return  // already loaded for this story
   markdownLoading.value = true
   markdownError.value = ''
   try {
     const res = await fetch(`/api/epics/${epicId.value}/stories/${storyId.value}/markdown`)
     if (!res.ok) { markdownError.value = 'No source file available for this story.'; return }
-    const text = await res.text()
-    markdownHtml.value = renderMarkdown(filterMarkdown(text))
+    markdownSource.value = await res.text()
   } catch {
     markdownError.value = 'Failed to load source file.'
   } finally {
@@ -140,7 +139,7 @@ function onTabChange(tab: 'requirements' | 'visualizer') {
 
 // Reset markdown state when story changes
 watch(storyId, () => {
-  markdownHtml.value = ''
+  markdownSource.value = ''
   markdownError.value = ''
   activeTab.value = 'requirements'
 })
@@ -260,7 +259,7 @@ watch(storyId, () => {
         <div v-else-if="activeTab === 'visualizer'" class="visualizer-panel">
           <p v-if="markdownLoading" class="viz-loading">Loading...</p>
           <p v-else-if="markdownError" class="viz-error">{{ markdownError }}</p>
-          <div v-else class="viz-content" v-html="markdownHtml"></div>
+          <MarkdownPane v-else :source="markdownSource" :filter="filterMarkdown" />
         </div>
 
       </div>
@@ -581,106 +580,4 @@ watch(storyId, () => {
 
 .viz-error { color: var(--text-2); }
 
-.viz-content {
-  font-size: 0.9rem;
-  line-height: 1.7;
-  color: var(--text-1);
-}
-
-.viz-content :deep(> *:first-child) { margin-top: 0; }
-
-.viz-content :deep(h1) {
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: var(--accent);
-  margin: 1.75rem 0 0.6rem;
-  letter-spacing: -0.01em;
-}
-.viz-content :deep(h2) {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--text-0);
-  margin: 1.5rem 0 0.5rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.3rem;
-}
-.viz-content :deep(h3) {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-1);
-  text-transform: none;
-  letter-spacing: 0;
-  margin: 1.25rem 0 0.4rem;
-}
-.viz-content :deep(h4) {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-1);
-  margin: 1rem 0 0.3rem;
-}
-.viz-content :deep(h5) {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-2);
-  margin: 0.9rem 0 0.25rem;
-}
-.viz-content :deep(h6) {
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--text-3);
-  margin: 0.8rem 0 0.2rem;
-}
-
-.viz-content :deep(p) { margin-bottom: 1rem; }
-
-.viz-content :deep(ul),
-.viz-content :deep(ol) {
-  padding-left: 2.25rem;
-  margin-bottom: 0.75rem;
-}
-
-.viz-content :deep(li) { margin-bottom: 0.45rem; padding-top: 0.1rem; }
-
-.viz-content :deep(code) {
-  font-family: var(--font-mono);
-  font-size: 0.82em;
-  background: var(--bg-2);
-  padding: 0.1em 0.35em;
-  border-radius: 3px;
-  color: var(--accent);
-}
-
-.viz-content :deep(blockquote) {
-  border-left: 3px solid var(--accent);
-  margin: 0 0 1rem 0;
-  padding: 0.5rem 0 0.5rem 1rem;
-  color: var(--text-2);
-  background: var(--bg-1);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.viz-content :deep(pre) {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0;
-  overflow-x: auto;
-  margin-bottom: 1rem;
-  font-size: 0.82rem;
-  line-height: 1.6;
-}
-
-.viz-content :deep(pre code.hljs) {
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-  font-size: 0.82rem;
-}
-
-.viz-content :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 1.25rem 0;
-}
-
-.viz-content :deep(strong) { color: var(--text-0); font-weight: 600; }
-.viz-content :deep(em) { color: var(--text-2); }
 </style>

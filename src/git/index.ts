@@ -98,11 +98,21 @@ async function extractDiffPlusLines(sha: string, git: SimpleGit): Promise<string
 // ─── Gitmap file I/O ────────────────────────────────────────────────
 
 function getGitMapPath(projectDir: string): string {
+  return path.join(projectDir, "bmad-dash", "gitmap.json");
+}
+
+/** Legacy cache location from the bmad-visio era; read once for migration. */
+function getLegacyGitMapPath(projectDir: string): string {
   return path.join(projectDir, "bmad-visio", "gitmap.json");
 }
 
 export function loadGitMap(projectDir: string): GitMapFile {
-  const p = getGitMapPath(projectDir);
+  let p = getGitMapPath(projectDir);
+  // Migrate from the old bmad-visio/ cache folder if the new one is absent.
+  if (!fs.existsSync(p)) {
+    const legacy = getLegacyGitMapPath(projectDir);
+    if (fs.existsSync(legacy)) p = legacy;
+  }
   if (fs.existsSync(p)) {
     try {
       const data = JSON.parse(fs.readFileSync(p, "utf-8"));

@@ -12,9 +12,25 @@ export const useProjectStore = defineStore('project', {
     selectedEpic: (state) =>
       state.project?.epics.find((e) => e.id === state.selectedEpicId) ?? null,
     commitMappings: (state) => state.project?.commitMappings ?? [],
+    documents: (state) => state.project?.documents ?? [],
+    sprintStatus: (state) => state.project?.sprintStatus ?? null,
+    frMap: (state) => state.project?.frMap ?? [],
+    nextStep: (state) => state.project?.nextStep ?? null,
+    risks: (state) => state.project?.risks ?? [],
+    projectConfig: (state) => state.project?.config ?? null,
+    docById: (state) => (id: string) =>
+      state.project?.documents?.find((d) => d.id === id) ?? null,
+    /** Unmatched commits (storyId === null) — work happening outside any tracked story. */
+    unmatchedCommits: (state) =>
+      (state.project?.commitMappings ?? []).filter((c) => c.storyId === null),
   },
   actions: {
-    setProject(data: BmadProject) {
+    setProject(data: BmadProject & { commits?: BmadProject['commitMappings'] }) {
+      // SSE broadcasts and the injected payload use `commits`; the API uses
+      // `commitMappings`. Normalize so the commits panel survives live updates.
+      if (data.commitMappings === undefined && data.commits !== undefined) {
+        data.commitMappings = data.commits
+      }
       this.project = data
       if (data.epics.length > 0 && !this.selectedEpicId) {
         this.selectedEpicId = data.epics[0].id

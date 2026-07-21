@@ -64,12 +64,19 @@
     <div class="section">
       <div class="section-title">Epics</div>
       <div class="epic-rows">
-        <div
+        <button
           v-for="row in epicRows"
           :key="row.id"
           class="epic-row"
+          @click="goToEpic(row.id)"
+          :title="`Open ${row.id}`"
         >
           <span class="epic-id-badge">{{ row.id }}</span>
+          <span
+            v-if="row.status"
+            class="epic-status-badge"
+            :style="{ color: `var(${row.statusColor})` }"
+          >{{ row.status }}</span>
           <span class="epic-title">{{ row.title }}</span>
           <span class="epic-story-count">{{ row.total }} stories</span>
           <span class="epic-pct-text">{{ row.pct }}%</span>
@@ -79,7 +86,7 @@
               :style="{ width: `${row.pct}%` }"
             ></div>
           </div>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -102,10 +109,24 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useProjectStore } from '../stores/project'
+import { useFilterStore } from '../stores/filters'
+import { EPIC_COLUMNS } from '../constants/columns'
 import type { Task } from '../../types/index'
 
 const store = useProjectStore()
+const filters = useFilterStore()
+const router = useRouter()
+
+function goToEpic(epicId: string) {
+  store.selectEpic(epicId)
+  router.push({ name: 'epic', params: { epicId } })
+}
+
+function epicStatusColor(status?: string): string {
+  return EPIC_COLUMNS.find((c) => c.key === status)?.colorVar ?? '--todo'
+}
 
 const STATUSES = [
   { key: 'todo',   label: 'To Do',      colorVar: '--todo',   bgVar: '--todo-bg'   },
@@ -157,11 +178,13 @@ const commitCoveragePct = computed(() =>
     : 0
 )
 
-// ─── Per-epic rows ───
+// ─── Per-epic rows (respect the shared filters) ───
 const epicRows = computed(() =>
-  store.epics.map(e => ({
+  store.epics.filter(e => filters.matchesEpic(e)).map(e => ({
     id: e.id,
     title: e.title,
+    status: e.status,
+    statusColor: epicStatusColor(e.status),
     total: e.stories.length,
     done: e.stories.filter(s => s.status === 'done').length,
     pct: e.stories.length
@@ -307,6 +330,20 @@ const epicRows = computed(() =>
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.epic-row:hover { background: var(--bg-3); border-color: var(--border-hover); }
+
+.epic-status-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
 }
 
 .epic-id-badge {

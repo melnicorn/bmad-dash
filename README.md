@@ -1,29 +1,37 @@
-# bmad-visio
-*This is an unofficial bmad tool, this is an experimental project that I built for myself and decided to share*
+# bmad-dash
 
-Visualize [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) epics and user stories from structured `.md` files on a localhost dashboard. Optionally uses local AI (Transformers.js) to match git commits to stories.
+*An unofficial, experimental dashboard for the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD).*
+
+Visualize BMAD epics, user stories, **and the full set of planning documents** (PRD, architecture, briefs, UX designs, specs, retrospectives, and more) from a project's `.md` files on a localhost dashboard. Optionally uses local AI (Transformers.js) to match git commits to stories.
 
 [Screenshots](#screenshots)
+
+> `bmad-dash` is a fork of [`bmad-visio`](https://github.com/williammesi/bmad-visio) by William Mesiti, extended with full document visibility, cross-linking, sprint-status integration, and filtering.
 
 ## Quick Start
 
 ```bash
-npx bmad-visio
+npx bmad-dash
 ```
 
-Run from your project root. Auto-detects BMAD structure:
+Run from your project root. It reads your BMAD install config to locate artifacts, so it works with customized paths:
 
-- `_bmad-output/planning-artifacts/` + `_bmad-output/implementation-artifacts/` (new BMAD)
-- `docs/sprint-artifacts/epics/` + `docs/sprint-artifacts/stories/` (old BMAD)
+- **BMAD v6** — reads `_bmad/bmm/config.yaml` for `planning_artifacts`, `implementation_artifacts`, and `project_knowledge`; treats `sprint-status.yaml` as the authoritative status source.
+- **BMAD v4 / v5** — reads `.bmad-core/core-config.{yaml,yml}` (`docs/stories/`, `docs/prd/`).
+- **Fallback** — globs the default `_bmad-output/` layout when no config file is present.
 
 ## Features
 
-- **Epic overview** — Grid of all epics with story counts and progress
+- **Epic overview** — Grid of all epics with story counts, status, and progress
 - **Kanban board** — Stories in 4 columns: To Do → Active → Review → Done
-- **Drag & drop** — Move stories between columns, writes status back to `.md` files
-- **Story detail** — Acceptance criteria, tasks with checkboxes, progress ring
-- **Live editing** — Toggle AC and tasks directly, updates files on disk
+- **Drag & drop** — Move stories between columns; writes status back to the `.md` file **and** `sprint-status.yaml`
+- **Story detail** — Acceptance criteria, tasks with checkboxes, progress ring, related commits
+- **Documents browser** — Browse and read every BMAD document, grouped by type and initiative, with a table of contents and rendered Markdown — no more opening raw files
+- **Cross-linking** — Follow a document's `inputDocuments` graph (upstream inputs and downstream "used by" backlinks), jump from an epic to its dependencies and requirements, and click through internal `.md` links in-app
+- **Filtering** — Hide completed epics or stories and text-filter across the sidebar, overview, and boards (persisted across sessions)
+- **Traceability** — Epic dependency edges (`Depends on: Epic N`) and the FR Coverage Map parsed from `epics.md`
 - **Git commit matching** — AI-powered mapping of commits to stories (optional)
+- **Live editing** — Toggle AC and tasks directly; the dashboard watches the filesystem and updates on change
 
 ## AI Commit Matching
 
@@ -36,17 +44,17 @@ npm install @huggingface/transformers
 The dashboard will then:
 
 1. Parse your git history
-2. Embed stories and commits with `all-MiniLM-L6-v2`
-3. Re-rank ambiguous matches with zero-shot NLI (`mobilebert-uncased-mnli`)
-4. Persist mappings in `bmad-visio/gitmap.json`
+2. Embed stories and commits with `bge-small-en-v1.5`
+3. Re-rank ambiguous matches with zero-shot NLI (`nli-deberta-v3-small`)
+4. Persist mappings in `bmad-dash/gitmap.json` (migrates an existing `bmad-visio/gitmap.json` if present)
 5. Show related commits on each story's detail page
 
-First run downloads models (~180MB total). Everything runs locally, no API keys needed.
+First run downloads models locally. Everything runs on-device, no API keys needed.
 
 ## Options
 
 ```
-npx bmad-visio [path] [options]
+npx bmad-dash [path] [options]
 
 Arguments:
   path              Project root (default: .)
@@ -60,16 +68,27 @@ Options:
 
 ## Status Mapping
 
-| BMAD Status                | Board Column     |
-| -------------------------- | ---------------- |
-| `backlog`, `ready-for-dev` | To Do            |
-| `in-progress`              | Active           |
-| `review`                   | Ready for Review |
-| `done`                     | Done             |
+| BMAD Status                          | Board Column     |
+| ------------------------------------ | ---------------- |
+| `backlog`, `ready-for-dev`           | To Do            |
+| `in-progress`                        | Active           |
+| `review`                             | Ready for Review |
+| `done`, `complete`, `cancelled`      | Done             |
+
+Epic and retrospective status come from `sprint-status.yaml` when present.
+
+## Development
+
+```bash
+npm install
+npm run dev -- /path/to/bmad/project   # tsx, no build step
+npm run build                          # server (tsc) + client (vite)
+npm test                               # vitest
+```
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). Originally created by William Mesiti as `bmad-visio`.
 
 ## Screenshots
 

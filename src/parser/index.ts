@@ -6,8 +6,12 @@ import remarkGfm from "remark-gfm";
 import { toString } from "mdast-util-to-string";
 import type { Root, Content, Heading, List, ListItem } from "mdast";
 import type {
-  Epic, UserStory, AcceptanceCriteria, Task, BmadProject,
+  Epic, UserStory, AcceptanceCriteria, Task, BmadProject, FrMapRow,
+  BmadConfig, SprintStatus, BmadDocument,
 } from "../types/index.js";
+import { resolveBmadConfig } from "./config.js";
+import { loadSprintStatus, writeSprintStatusEntry } from "./sprint-status.js";
+import { parseDocuments } from "./documents.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -79,7 +83,8 @@ export type BoardStatus = (typeof BOARD_COLUMNS)[number];
 
 function parseStatus(raw: string): BoardStatus {
   const lower = raw.toLowerCase();
-  if (lower.includes("done") || lower.includes("✅")) return "done";
+  // "cancelled" stories are finished work — group under done rather than todo.
+  if (lower.includes("done") || lower.includes("complete") || lower.includes("cancel") || lower.includes("✅")) return "done";
   if (lower.includes("review")) return "review";
   if (lower.includes("in-progress") || lower.includes("in progress") || lower.includes("active") || lower.includes("🔄")) return "active";
   return "todo";
@@ -198,11 +203,12 @@ function parseNewStoryFile(content: string, filePath: string): UserStory | null 
 
   // Status is plain text: "Status: ready-for-dev"
   let status: BoardStatus = "todo";
+  let rawStatus: string | undefined;
   for (const node of nodes) {
     if (node.type !== "paragraph") continue;
     const text = toString(node);
     const statusMatch = text.match(/^Status:\s*(.+)/i);
-    if (statusMatch) { status = parseStatus(statusMatch[1]); break; }
+    if (statusMatch) { rawStatus = statusMatch[1].trim(); status = parseStatus(rawStatus); break; }
   }
 
   const sections = splitByHeading(nodes, 2);
@@ -242,6 +248,8 @@ function parseNewStoryFile(content: string, filePath: string): UserStory | null 
     acceptanceCriteria,
     tasks,
     status,
+    rawStatus,
+    statusSource: "file",
     priority: meta["Priority"],
     epicRef: meta["Epic"],
     sourceFile: filePath,
@@ -300,11 +308,81 @@ function parseStoryFile(content: string, filePath: string): UserStory | null {
 
 // ─── Epic parsers ───────────────────────────────────────────────────
 
+interface EpicTraceability {
+  requirements: string[];
+  dependsOn: number[];
+}
+
+/**
+ * Extract per-epic traceability (Requirements covered, Additional requirements,
+ * Depends on) from the `### Epic N:` summary blocks in the Epic List. These live
+ * separately from the `## Epic N:` detail sections. Keyed by epic number.
+ */
+function parseEpicTraceability(content: string): Map<number, EpicTraceability> {
+  const map = new Map<number, EpicTraceability>();
+  // Split the file into `### Epic N:` blocks (summary entries).
+  const blockRe = /^###\s+Epic\s+(\d+):[^\n]*$/gim;
+  const norm = normalizeContent(content);
+  const matches: { num: number; start: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(norm)) !== null) {
+    matches.push({ num: parseInt(m[1], 10), start: m.index });
+  }
+  for (let i = 0; i < matches.length; i++) {
+    const block = norm.slice(matches[i].start, matches[i + 1]?.start ?? norm.length);
+    const requirements = new Set<string>();
+    const reqLine = block.match(/\*\*Requirements covered:\*\*\s*([^\n]+)/i);
+    const addLine = block.match(/\*\*Additional requirements:\*\*\s*([^\n]+)/i);
+    for (const line of [reqLine?.[1], addLine?.[1]]) {
+      if (!line) continue;
+      for (const id of line.match(/\b(?:FR|NFR|AD|AR|UX-DR)-[\w.]+/gi) ?? []) {
+        requirements.add(id.toUpperCase());
+      }
+    }
+    const dependsOn = new Set<number>();
+    const depLine = block.match(/\*Depends on:\s*([^\n]*)\*/i);
+    if (depLine) {
+      for (const d of depLine[1].match(/Epic\s+(\d+)/gi) ?? []) {
+        dependsOn.add(parseInt(d.replace(/\D/g, ""), 10));
+      }
+    }
+    // Merge (an epic number may appear in both the Epic List and a backlog section).
+    const existing = map.get(matches[i].num) ?? { requirements: [], dependsOn: [] };
+    map.set(matches[i].num, {
+      requirements: [...new Set([...existing.requirements, ...requirements])],
+      dependsOn: [...new Set([...existing.dependsOn, ...dependsOn])],
+    });
+  }
+  return map;
+}
+
+/** Parse the `### FR Coverage Map` markdown table into rows. */
+function parseFrCoverageMap(content: string): FrMapRow[] {
+  const norm = normalizeContent(content);
+  const headingIdx = norm.search(/^#{2,4}\s+FR Coverage Map\s*$/im);
+  if (headingIdx === -1) return [];
+  const after = norm.slice(headingIdx);
+  const rows: FrMapRow[] = [];
+  for (const line of after.split("\n").slice(1)) {
+    // Stop at the next heading.
+    if (/^#{1,6}\s/.test(line)) break;
+    const cells = line.match(/^\s*\|(.+)\|\s*$/);
+    if (!cells) continue;
+    const parts = cells[1].split("|").map((c) => c.trim());
+    // Skip header row and separator row.
+    if (/^requirement$/i.test(parts[0]) || /^-{2,}$/.test(parts[0].replace(/:/g, ""))) continue;
+    if (!parts[0]) continue;
+    rows.push({ requirement: parts[0], epic: parts[1] ?? "", notes: parts[2] || undefined });
+  }
+  return rows;
+}
+
 /** New BMAD: single epics.md with ## Epic N: and ### Story X.Y: */
 function parseEpicsFile(content: string, filePath: string): Epic[] {
   const tree = parseMarkdown(normalizeContent(content));
   const h2Sections = splitByHeading(tree.children, 2);
   const epics: Epic[] = [];
+  const traceability = parseEpicTraceability(content);
 
   for (const section of h2Sections) {
     const epicMatch = section.heading.match(/^Epic\s+(\d+):\s*(.+)/i);
@@ -342,12 +420,19 @@ function parseEpicsFile(content: string, filePath: string): Epic[] {
         acceptanceCriteria: ac,
         tasks: [],
         status: parseStatus(storyMeta["Status"] ?? ""),
+        rawStatus: storyMeta["Status"],
+        statusSource: "file",
         priority: storyMeta["Priority"],
         sourceFile: filePath,
       });
     }
 
-    epics.push({ id: epicId, title: epicMatch[2].trim(), description, stories });
+    const trace = traceability.get(parseInt(epicNum, 10));
+    epics.push({
+      id: epicId, title: epicMatch[2].trim(), description, stories,
+      requirements: trace?.requirements.length ? trace.requirements : undefined,
+      dependsOn: trace?.dependsOn.length ? trace.dependsOn : undefined,
+    });
   }
 
   return epics;
@@ -405,16 +490,29 @@ function detectStructure(dir: string): "bmad-new" | "bmad-old" | "flat" {
   return "flat";
 }
 
+/** Choose a parse layout from the resolved config, falling back to legacy detection. */
+function layoutForConfig(config: BmadConfig, dir: string): "bmad-new" | "bmad-old" | "flat" {
+  if (config.version === "v6" || config.version === "unknown") {
+    if (fs.existsSync(config.planningDir) || fs.existsSync(config.implementationDir)) return "bmad-new";
+  }
+  if (config.version === "v4" || config.version === "v5") {
+    if (fs.existsSync(config.implementationDir)) return "bmad-old";
+  }
+  return detectStructure(dir);
+}
+
 export function parseBmadProject(opts: ParseOptions): BmadProject {
   const { dir } = opts;
-  const mode = opts.mode === "auto" || !opts.mode ? detectStructure(dir) : opts.mode;
+  const config = resolveBmadConfig(dir);
+  const mode = opts.mode === "auto" || !opts.mode ? layoutForConfig(config, dir) : opts.mode;
   const raw: Record<string, string> = {};
   const epics: Epic[] = [];
   const standaloneStories: UserStory[] = [];
+  let frMap: FrMapRow[] = [];
 
   if (mode === "bmad-new") {
-    const planDir = path.join(dir, "_bmad-output", "planning-artifacts");
-    const implDir = path.join(dir, "_bmad-output", "implementation-artifacts");
+    const planDir = config.planningDir;
+    const implDir = config.implementationDir;
 
     // Parse epics.md (single file with all epics)
     const epicsFile = path.join(planDir, "epics.md");
@@ -422,6 +520,7 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
       const content = fs.readFileSync(epicsFile, "utf-8");
       raw[path.relative(dir, epicsFile)] = content;
       epics.push(...parseEpicsFile(content, epicsFile));
+      frMap = parseFrCoverageMap(content);
     }
 
     // Parse standalone story files
@@ -433,18 +532,38 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
     }
 
   } else if (mode === "bmad-old") {
-    const sprintDir = path.join(dir, "docs", "sprint-artifacts");
-    for (const file of findMarkdownFiles(path.join(sprintDir, "epics"))) {
+    // v4/v5: docs/stories/*.md + docs/prd/epic-*.md, driven by config paths.
+    const storyDir = config.implementationDir;
+    const epicDir = config.planningDir;
+    for (const file of findMarkdownFiles(epicDir)) {
+      if (!/epic-\d+/i.test(path.basename(file))) continue;
       const content = fs.readFileSync(file, "utf-8");
       raw[path.relative(dir, file)] = content;
       const epic = parseOldEpicFile(content, file);
       if (epic) epics.push(epic);
     }
-    for (const file of findMarkdownFiles(path.join(sprintDir, "stories"))) {
+    for (const file of findMarkdownFiles(storyDir)) {
       const content = fs.readFileSync(file, "utf-8");
       raw[path.relative(dir, file)] = content;
       const story = parseStoryFile(content, file);
       if (story) standaloneStories.push(story);
+    }
+
+    // Legacy docs/sprint-artifacts/ community variant (kept as a fallback).
+    const sprintDir = path.join(dir, "docs", "sprint-artifacts");
+    if (fs.existsSync(sprintDir)) {
+      for (const file of findMarkdownFiles(path.join(sprintDir, "epics"))) {
+        const content = fs.readFileSync(file, "utf-8");
+        raw[path.relative(dir, file)] = content;
+        const epic = parseOldEpicFile(content, file);
+        if (epic) epics.push(epic);
+      }
+      for (const file of findMarkdownFiles(path.join(sprintDir, "stories"))) {
+        const content = fs.readFileSync(file, "utf-8");
+        raw[path.relative(dir, file)] = content;
+        const story = parseStoryFile(content, file);
+        if (story) standaloneStories.push(story);
+      }
     }
 
   } else {
@@ -453,7 +572,11 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
       raw[path.relative(dir, file)] = content;
       // Try as epic file first
       const parsedEpics = parseEpicsFile(content, file);
-      if (parsedEpics.length > 0) { epics.push(...parsedEpics); continue; }
+      if (parsedEpics.length > 0) {
+        epics.push(...parsedEpics);
+        if (!frMap.length) frMap = parseFrCoverageMap(content);
+        continue;
+      }
       const epic = parseOldEpicFile(content, file);
       if (epic) { epics.push(epic); continue; }
       const story = parseStoryFile(content, file);
@@ -461,25 +584,30 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
     }
   }
 
-  // Merge standalone stories into parent epics
+  const epicNumOf = (e: Epic) => parseInt(e.id.replace(/\D/g, ""), 10).toString();
+
+  // Merge standalone stories into parent epics; create the epic if it exists
+  // only as story files (e.g. an epic with no header in epics.md).
   for (const story of standaloneStories) {
     const epicNum = parseInt(story.id.split(".")[0], 10).toString();
-    const parentEpic = epics.find((e) => {
-      // Parse as integer to avoid "00" → "" when stripping leading zeros (e.g. EPIC-00 must match epic "0")
-      const eNum = parseInt(e.id.replace(/\D/g, ""), 10).toString();
-      return eNum === epicNum;
-    });
-    if (parentEpic) {
-      const existingIdx = parentEpic.stories.findIndex((s) => s.id === story.id);
-      if (existingIdx >= 0) {
-        const existing = parentEpic.stories[existingIdx];
-        if (!story.status || story.status === "todo") story.status = existing.status;
-        parentEpic.stories[existingIdx] = story;
-      } else {
-        parentEpic.stories.push(story);
-      }
+    let parentEpic = epics.find((e) => epicNumOf(e) === epicNum);
+    if (!parentEpic) {
+      parentEpic = { id: `EPIC-${epicNum.padStart(2, "0")}`, title: `Epic ${epicNum}`, description: "", stories: [] };
+      epics.push(parentEpic);
+    }
+    const existingIdx = parentEpic.stories.findIndex((s) => s.id === story.id);
+    if (existingIdx >= 0) {
+      const existing = parentEpic.stories[existingIdx];
+      if (!story.status || story.status === "todo") story.status = existing.status;
+      parentEpic.stories[existingIdx] = story;
+    } else {
+      parentEpic.stories.push(story);
     }
   }
+
+  // ─── Reconcile with sprint-status.yaml (authoritative in v6) ──────
+  const sprintStatus = mode === "bmad-new" ? loadSprintStatus(config.implementationDir) : null;
+  if (sprintStatus) reconcileSprintStatus(epics, sprintStatus);
 
   for (const epic of epics) {
     epic.stories.sort((a, b) => {
@@ -492,11 +620,100 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
       return 0;
     });
   }
+  epics.sort((a, b) => Number(epicNumOf(a)) - Number(epicNumOf(b)));
 
-  return { name: path.basename(path.resolve(dir)), epics, raw };
+  // ─── Documents index ─────────────────────────────────────────────
+  let documents: BmadDocument[];
+  try { documents = parseDocuments(config); } catch { documents = []; }
+
+  return {
+    name: config.projectName || path.basename(path.resolve(dir)),
+    epics,
+    raw,
+    config,
+    sprintStatus: sprintStatus ?? undefined,
+    documents,
+    frMap: frMap.length ? frMap : undefined,
+  };
+}
+
+// ─── Sprint-status reconciliation ───────────────────────────────────
+// sprint-status.yaml is authoritative for status; per-file Status: is the
+// fallback. Records statusSource and flags drift so the UI can surface it.
+
+const STORY_KEY_RE = /^(\d+)-(\d+)-/;
+
+function reconcileSprintStatus(epics: Epic[], sprint: SprintStatus): void {
+  const epicByNum = new Map<number, Epic>();
+  for (const e of epics) epicByNum.set(parseInt(e.id.replace(/\D/g, ""), 10), e);
+
+  // Epic + retrospective status.
+  for (const [key, status] of Object.entries(sprint.epics)) {
+    const num = parseInt(key.replace(/\D/g, ""), 10);
+    let epic = epicByNum.get(num);
+    if (!epic) {
+      epic = { id: `EPIC-${String(num).padStart(2, "0")}`, title: `Epic ${num}`, description: "", stories: [] };
+      epics.push(epic);
+      epicByNum.set(num, epic);
+    }
+    epic.status = status;
+  }
+  for (const [key, status] of Object.entries(sprint.retrospectives)) {
+    const num = parseInt(key.replace(/\D/g, ""), 10);
+    const epic = epicByNum.get(num);
+    if (epic) epic.retrospectiveStatus = status;
+  }
+
+  // Story status.
+  for (const [key, rawSprintStatus] of Object.entries(sprint.stories)) {
+    const m = key.match(STORY_KEY_RE);
+    if (!m) continue;
+    const epicNum = parseInt(m[1], 10);
+    const storyId = `${epicNum}.${parseInt(m[2], 10)}`;
+    let epic = epicByNum.get(epicNum);
+    if (!epic) {
+      epic = { id: `EPIC-${String(epicNum).padStart(2, "0")}`, title: `Epic ${epicNum}`, description: "", stories: [] };
+      epics.push(epic);
+      epicByNum.set(epicNum, epic);
+    }
+    let story = epic.stories.find((s) => s.id === storyId);
+    const boardStatus = parseStatus(rawSprintStatus);
+    if (!story) {
+      // Backlog story that lives only in sprint-status — create a stub.
+      const slug = key.replace(STORY_KEY_RE, "").replace(/-/g, " ").trim();
+      story = {
+        id: storyId,
+        title: slug ? slug.replace(/\b\w/g, (c) => c.toUpperCase()) : `Story ${storyId}`,
+        description: "",
+        acceptanceCriteria: [],
+        tasks: [],
+      };
+      epic.stories.push(story);
+    }
+    // Flag drift before overwriting: file-derived board status vs sprint status.
+    if (story.rawStatus && story.status && story.status !== boardStatus) {
+      story.statusConflict = true;
+    }
+    story.status = boardStatus;
+    story.rawStatus = rawSprintStatus;
+    story.statusSource = "sprint-status";
+  }
 }
 
 // ─── Write-back: status ─────────────────────────────────────────────
+
+/** Find the sprint-status.yaml key for a story (from its filename or number prefix). */
+function sprintKeyForStory(project: BmadProject, story: UserStory): string | undefined {
+  if (story.sourceFile) {
+    const base = path.basename(story.sourceFile).replace(/\.md$/, "");
+    if (STORY_KEY_RE.test(base)) return base;
+  }
+  // Fall back to matching a sprint-status key by "{epic}-{story}-" prefix.
+  const [epicNum, storyNum] = story.id.split(".").map((n) => parseInt(n, 10));
+  const prefix = `${epicNum}-${storyNum}-`;
+  const keys = project.sprintStatus ? Object.keys(project.sprintStatus.stories) : [];
+  return keys.find((k) => k.startsWith(prefix));
+}
 
 export function updateStoryStatus(
   project: BmadProject, epicId: string, storyId: string, newStatus: BoardStatus
@@ -505,34 +722,65 @@ export function updateStoryStatus(
   if (!epic) return { ok: false, error: "Epic not found" };
   const story = epic.stories.find((s) => s.id === storyId);
   if (!story) return { ok: false, error: "Story not found" };
-  const filePath = story.sourceFile;
-  if (!filePath || !fs.existsSync(filePath)) return { ok: false, error: "Source file not found" };
-
-  let content = fs.readFileSync(filePath, "utf-8");
-  const hasWindows = content.includes("\r\n");
-  const norm = content.replace(/\r\n/g, "\n");
   const mdStatus = statusToMarkdown(newStatus);
 
-  let updated: string;
-  // Try plain "Status: xxx" (new format)
-  if (/^Status:\s/m.test(norm)) {
-    updated = norm.replace(/^(Status:\s*)[^\n]*$/m, `$1${mdStatus}`);
-  } else if (/^\*\*Status:\*\*/m.test(norm)) {
-    updated = norm.replace(/^(\*\*Status:\*\*\s*)[^\n]*$/m, `$1${mdStatus}`);
-  } else {
-    // Insert status line after H1
-    const lines = norm.split("\n");
-    const h1Idx = lines.findIndex((l) => /^#\s+Story/i.test(l));
-    if (h1Idx >= 0) {
-      lines.splice(h1Idx + 1, 0, "", `Status: ${mdStatus}`);
-      updated = lines.join("\n");
+  // ─── Write the story file (if one exists) ───
+  const filePath = story.sourceFile;
+  if (filePath && fs.existsSync(filePath)) {
+    let content = fs.readFileSync(filePath, "utf-8");
+    const hasWindows = content.includes("\r\n");
+    const norm = content.replace(/\r\n/g, "\n");
+
+    let updated: string;
+    if (/^Status:\s/m.test(norm)) {
+      updated = norm.replace(/^(Status:\s*)[^\n]*$/m, `$1${mdStatus}`);
+    } else if (/^\*\*Status:\*\*/m.test(norm)) {
+      updated = norm.replace(/^(\*\*Status:\*\*\s*)[^\n]*$/m, `$1${mdStatus}`);
     } else {
-      updated = norm;
+      const lines = norm.split("\n");
+      const h1Idx = lines.findIndex((l) => /^#\s+Story/i.test(l));
+      if (h1Idx >= 0) {
+        lines.splice(h1Idx + 1, 0, "", `Status: ${mdStatus}`);
+        updated = lines.join("\n");
+      } else {
+        updated = norm;
+      }
+    }
+    fs.writeFileSync(filePath, hasWindows ? updated.replace(/\n/g, "\r\n") : updated, "utf-8");
+  }
+
+  // ─── Mirror into sprint-status.yaml (authoritative in v6) ───
+  if (project.config && project.sprintStatus) {
+    const key = sprintKeyForStory(project, story);
+    if (key) {
+      const res = writeSprintStatusEntry(project.config.implementationDir, key, mdStatus);
+      if (res.ok) project.sprintStatus.stories[key] = mdStatus;
+      // A failed yaml sync is non-fatal — the story file is still updated.
     }
   }
 
-  fs.writeFileSync(filePath, hasWindows ? updated.replace(/\n/g, "\r\n") : updated, "utf-8");
+  if (!filePath && !(project.config && project.sprintStatus)) {
+    return { ok: false, error: "Source file not found" };
+  }
+
   story.status = newStatus;
+  story.statusConflict = false;
+  return { ok: true };
+}
+
+/** Update an epic's status in sprint-status.yaml. */
+export function updateEpicStatus(
+  project: BmadProject, epicId: string, newStatus: string
+): { ok: boolean; error?: string } {
+  const epic = project.epics.find((e) => e.id === epicId);
+  if (!epic) return { ok: false, error: "Epic not found" };
+  if (!project.config || !project.sprintStatus) return { ok: false, error: "No sprint-status.yaml" };
+  const num = parseInt(epic.id.replace(/\D/g, ""), 10);
+  const key = `epic-${num}`;
+  const res = writeSprintStatusEntry(project.config.implementationDir, key, newStatus);
+  if (!res.ok) return res;
+  project.sprintStatus.epics[key] = newStatus;
+  epic.status = newStatus;
   return { ok: true };
 }
 
@@ -555,9 +803,13 @@ export function toggleAcceptanceCriteria(
   const norm = content.replace(/\r\n/g, "\n");
   const lines = norm.split("\n");
   const checkboxRe = /^(\s*-\s*)\[([ xX])\](.*)$/;
+
+  // Scope counting to the "## Acceptance Criteria" section only — counting every
+  // checkbox in the file desyncs indices whenever Tasks precede or interleave ACs.
+  const [acStart, acEnd] = sectionBounds(lines, /^#{1,6}\s+acceptance criteria/i);
   let count = 0;
 
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = acStart; i < acEnd; i++) {
     const m = lines[i].match(checkboxRe);
     if (m) {
       count++;
@@ -570,7 +822,31 @@ export function toggleAcceptanceCriteria(
       }
     }
   }
-  return { ok: false, error: "Checkbox not found in file" };
+  return { ok: false, error: "Checkbox not found in Acceptance Criteria section" };
+}
+
+/**
+ * Return [start, end) line indices spanning the section whose heading matches
+ * `headingRe`, up to the next same-or-higher-level heading. Falls back to the
+ * whole file when the heading is absent.
+ */
+function sectionBounds(lines: string[], headingRe: RegExp): [number, number] {
+  let start = -1;
+  let headingDepth = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const h = lines[i].match(/^(#{1,6})\s+/);
+    if (h && headingRe.test(lines[i])) {
+      start = i + 1;
+      headingDepth = h[1].length;
+      break;
+    }
+  }
+  if (start === -1) return [0, lines.length];
+  for (let i = start; i < lines.length; i++) {
+    const h = lines[i].match(/^(#{1,6})\s+/);
+    if (h && h[1].length <= headingDepth) return [start, i];
+  }
+  return [start, lines.length];
 }
 
 // ─── Write-back: toggle Task ────────────────────────────────────────

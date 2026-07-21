@@ -1,5 +1,6 @@
 node_modules/
 dist/
+bmad-dash/
 bmad-visio/
 .planning/
 _bmad-output/
