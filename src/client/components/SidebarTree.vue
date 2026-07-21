@@ -30,22 +30,18 @@
         :value="filters.text"
         @input="filters.setText(($event.target as HTMLInputElement).value)"
       />
-      <label class="filter-toggle">
-        <input
-          type="checkbox"
-          :checked="filters.hideCompletedEpics"
-          @change="filters.setHideCompletedEpics(($event.target as HTMLInputElement).checked)"
-        />
+      <ToggleSwitch
+        :model-value="filters.hideCompletedEpics"
+        @update:model-value="filters.setHideCompletedEpics($event)"
+      >
         Hide completed epics
-      </label>
-      <label class="filter-toggle">
-        <input
-          type="checkbox"
-          :checked="filters.hideCompletedStories"
-          @change="filters.setHideCompletedStories(($event.target as HTMLInputElement).checked)"
-        />
+      </ToggleSwitch>
+      <ToggleSwitch
+        :model-value="filters.hideCompletedStories"
+        @update:model-value="filters.setHideCompletedStories($event)"
+      >
         Hide completed stories
-      </label>
+      </ToggleSwitch>
     </div>
 
     <SidebarEpicItem
@@ -76,6 +72,7 @@ import { useProjectStore } from '../stores/project'
 import { useFilterStore } from '../stores/filters'
 import SidebarEpicItem from './SidebarEpicItem.vue'
 import SidebarStoryItem from './SidebarStoryItem.vue'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 // ─── Store & Router ───
 const store = useProjectStore()
@@ -255,15 +252,5 @@ watch(() => store.selectedEpicId, (id) => {
   font-size: 0.78rem;
 }
 .filter-input:focus { outline: none; border-color: var(--accent); }
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.76rem;
-  color: var(--text-2);
-  cursor: pointer;
-}
-.filter-toggle input { cursor: pointer; }
-
 .no-epics { color: var(--text-3); font-size: 0.8rem; padding: 8px 12px; }
 </style>
