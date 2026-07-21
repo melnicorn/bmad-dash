@@ -6,3 +6,5 @@ bmad-visio/
 _bmad-output/
 _bmad-output/*
 .claude/
+# npm lockfile — this project uses pnpm (see packageManager in package.json)
+package-lock.json

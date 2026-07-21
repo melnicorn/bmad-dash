@@ -11,7 +11,7 @@ Visualize BMAD epics, user stories, **and the full set of planning documents** (
 ## Quick Start
 
 ```bash
-npx bmad-dash
+npx @melnicorn/bmad-dash
 ```
 
 Run from your project root. It reads your BMAD install config to locate artifacts, so it works with customized paths:
@@ -56,7 +56,7 @@ First run downloads models locally. Everything runs on-device, no API keys neede
 ## Options
 
 ```
-npx bmad-dash [path] [options]
+npx @melnicorn/bmad-dash [path] [options]
 
 Arguments:
   path              Project root (default: .)
@@ -82,10 +82,10 @@ Epic and retrospective status come from `sprint-status.yaml` when present.
 ## Development
 
 ```bash
-npm install
-npm run dev -- /path/to/bmad/project   # tsx, no build step
-npm run build                          # server (tsc) + client (vite)
-npm test                               # vitest
+pnpm install
+pnpm dev -- /path/to/bmad/project      # tsx, no build step
+pnpm build                             # server (tsc) + client (vite)
+pnpm test                              # vitest
 ```
 
 ## License

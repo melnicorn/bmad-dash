@@ -14,7 +14,7 @@ if (args.includes("--help") || args.includes("-h")) {
   bmad-dash — Visualize BMAD epics, stories, docs & git history
 
   Usage:
-    npx bmad-dash [path] [options]
+    npx @melnicorn/bmad-dash [path] [options]
 
   Arguments:
     path              Project root (default: .)

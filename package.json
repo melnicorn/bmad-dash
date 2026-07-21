@@ -1,6 +1,6 @@
 {
-  "name": "bmad-dash",
-  "version": "0.0.1",
+  "name": "@melnicorn/bmad-dash",
+  "version": "1.0.0",
   "description": "Visualize BMAD Method epics, stories & documents with AI-powered git commit matching",
   "type": "module",
   "main": "dist/cli.js",
@@ -18,8 +18,8 @@
     "dev": "tsx src/cli.ts",
     "build:server": "tsc",
     "build:client": "vite build",
-    "build": "npm run build:server && npm run build:client",
-    "prepublishOnly": "npm run build",
+    "build": "pnpm run build:server && pnpm run build:client",
+    "prepublishOnly": "pnpm run build",
     "start": "node dist/cli.js"
   },
   "keywords": [
@@ -54,6 +54,9 @@
     "William Mesiti (original bmad-visio author)"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "chokidar": "^5.0.0",
     "express": "^4.21.2",
@@ -76,6 +79,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.2",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^22.15.17",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/tsconfig": "^0.9.0",
@@ -85,6 +89,7 @@
     "vite": "^8.0.0",
     "vitest": "^4.1.0"
   },
+  "packageManager": "pnpm@10.30.0",
   "engines": {
     "node": ">=18.0.0"
   }

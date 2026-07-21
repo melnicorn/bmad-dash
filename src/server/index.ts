@@ -211,7 +211,7 @@ export function createServer(project: BmadProject, port: number, devSrcDir?: str
   } else {
     app.listen(port, () => {
       console.log(`\n  BMAD Dashboard running at http://localhost:${port}\n`);
-      console.log(`  Build not found. Run "npm run build" first.\n`);
+      console.log(`  Build not found. Run "pnpm build" first.\n`);
     });
   }
 }
