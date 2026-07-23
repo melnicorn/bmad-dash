@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { CircleCheck } from '@lucide/vue'
 import { useProjectStore } from '../stores/project'
 import { STORY_COLUMNS, storyColumnKey } from '../constants/columns'
 import type { Epic } from '../../types/index'
@@ -40,7 +41,9 @@ function open() {
   <article class="epic-card" draggable="true" @dragstart="onDragStart" @click="open">
     <header class="card-head">
       <span class="card-id">{{ epic.id }}</span>
-      <span v-if="epic.retrospectiveStatus === 'done'" class="retro-dot" title="Retrospective complete">✓retro</span>
+      <span v-if="epic.retrospectiveStatus === 'done'" class="retro-dot" title="Retrospective complete">
+        <CircleCheck :size="12" :stroke-width="2.5" />retro
+      </span>
     </header>
     <h4 class="card-title">{{ epic.title }}</h4>
 
@@ -91,7 +94,7 @@ function open() {
   color: var(--text-2); background: var(--bg-3);
   border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
 }
-.retro-dot { margin-left: auto; font-size: 0.62rem; color: var(--done); }
+.retro-dot { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; font-size: 0.62rem; color: var(--done); }
 
 .card-title {
   font-size: 0.82rem; font-weight: 600; color: var(--text-0);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { PartyPopper, TriangleAlert, Info, Check, ArrowRight } from '@lucide/vue'
 import { useProjectStore } from '../stores/project'
 
 const store = useProjectStore()
@@ -48,21 +49,28 @@ function openTarget() {
     </div>
 
     <div v-if="allDone" class="ns-done">
-      🎉 All implementation items are done — nice work!
+      <PartyPopper :size="16" :stroke-width="2" />
+      All implementation items are done — nice work!
     </div>
 
     <template v-else>
       <p class="ns-recommend">{{ next.label }}</p>
       <div class="ns-actions">
         <code class="ns-command">{{ next.command }}</code>
-        <button class="ns-copy" @click="copyCommand">{{ copied ? 'Copied ✓' : 'Copy' }}</button>
-        <button v-if="targetRoute" class="ns-open" @click="openTarget">Open story →</button>
+        <button class="ns-copy" @click="copyCommand">
+          <Check v-if="copied" :size="13" :stroke-width="2.5" />
+          {{ copied ? 'Copied' : 'Copy' }}
+        </button>
+        <button v-if="targetRoute" class="ns-open" @click="openTarget">
+          Open story
+          <ArrowRight :size="13" :stroke-width="2" />
+        </button>
       </div>
     </template>
 
     <ul v-if="risks.length" class="ns-risks">
       <li v-for="(r, i) in risks" :key="i" :class="r.level">
-        <span class="risk-icon">{{ r.level === 'warning' ? '⚠' : 'ℹ' }}</span>
+        <component :is="r.level === 'warning' ? TriangleAlert : Info" class="risk-icon" :size="14" :stroke-width="2" />
         {{ r.message }}
       </li>
     </ul>
@@ -86,7 +94,7 @@ function openTarget() {
 .ns-updated { margin-left: auto; font-size: 0.68rem; color: var(--text-3); }
 
 .ns-recommend { font-size: 0.9rem; color: var(--text-0); margin: 0 0 10px; font-weight: 500; }
-.ns-done { font-size: 0.9rem; color: var(--done); }
+.ns-done { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--done); }
 
 .ns-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ns-command {
@@ -99,6 +107,9 @@ function openTarget() {
   color: var(--accent);
 }
 .ns-copy, .ns-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -113,5 +124,5 @@ function openTarget() {
 .ns-risks { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .ns-risks li { font-size: 0.78rem; color: var(--text-2); display: flex; gap: 7px; align-items: flex-start; }
 .ns-risks li.warning { color: var(--review); }
-.risk-icon { flex-shrink: 0; }
+.risk-icon { flex-shrink: 0; margin-top: 1px; }
 </style>

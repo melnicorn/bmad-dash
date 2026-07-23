@@ -2,6 +2,7 @@
   <div class="app-layout">
     <header class="top-bar">
       <span class="top-bar-brand">BMAD-DASH</span>
+      <ThemeToggle class="top-bar-theme" />
     </header>
     <aside class="sidebar">
       <SidebarTree />
@@ -15,6 +16,7 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import SidebarTree from './SidebarTree.vue'
+import ThemeToggle from './ThemeToggle.vue'
 </script>
 
 <style scoped>
@@ -45,6 +47,10 @@ import SidebarTree from './SidebarTree.vue'
   letter-spacing: 0.08em;
   color: var(--text-0);
   text-transform: uppercase;
+}
+
+.top-bar-theme {
+  margin-left: auto;
 }
 
 .sidebar {

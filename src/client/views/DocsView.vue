@@ -106,7 +106,10 @@ function metaFor(doc: BmadDocument) {
       <template v-else-if="activeDoc">
         <header class="doc-header">
           <div class="doc-crumb">
-            <span class="doc-type-badge">{{ metaFor(activeDoc).icon }} {{ metaFor(activeDoc).label }}</span>
+            <span class="doc-type-badge">
+              <component :is="metaFor(activeDoc).icon" :size="13" :stroke-width="2" />
+              {{ metaFor(activeDoc).label }}
+            </span>
             <span class="doc-path">{{ activeDoc.path }}</span>
           </div>
           <h1 class="doc-title">{{ activeDoc.title }}</h1>
@@ -176,6 +179,9 @@ function metaFor(doc: BmadDocument) {
 .doc-header { border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; padding-bottom: 0.75rem; }
 .doc-crumb { display: flex; align-items: center; gap: 10px; margin-bottom: 0.4rem; flex-wrap: wrap; }
 .doc-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.72rem;
   color: var(--accent);
   background: var(--accent-dim);

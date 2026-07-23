@@ -1,5 +1,15 @@
-/* ─── CSS Variables ─── */
+/* ─── Design tokens (theme-agnostic) ─── */
 :root {
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  color-scheme: dark;
+}
+
+/* ─── Dark palette (default) ─── */
+:root,
+:root[data-theme='dark'] {
   --bg-0: #08090c;
   --bg-1: #0e1015;
   --bg-2: #151820;
@@ -20,10 +30,31 @@
   --review-bg: #a78bfa15;
   --todo: #64748b;
   --todo-bg: #64748b12;
-  --radius: 10px;
-  --radius-sm: 6px;
-  --font-display: 'Outfit', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ─── Light palette ─── */
+:root[data-theme='light'] {
+  --bg-0: #ffffff;
+  --bg-1: #f7f8fa;
+  --bg-2: #eef0f4;
+  --bg-3: #e3e6ec;
+  --border: #d5d9e2;
+  --border-hover: #b6bdcc;
+  --text-0: #1a1d24;
+  --text-1: #3a4051;
+  --text-2: #6a7285;
+  --text-3: #9aa1b3;
+  --accent: #4560d8;
+  --accent-dim: #4560d81a;
+  --done: #0f9d6b;
+  --done-bg: #0f9d6b18;
+  --active: #b8790a;
+  --active-bg: #f59e0b1f;
+  --review: #7c4ddb;
+  --review-bg: #7c4ddb16;
+  --todo: #6b7280;
+  --todo-bg: #6b728015;
+  color-scheme: light;
 }
 
 /* ─── Base Reset ─── */

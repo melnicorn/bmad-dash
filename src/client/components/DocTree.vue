@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { BmadDocument, DocType } from '../../types/index'
+import type { LucideIcon } from '@lucide/vue'
 import { docTypeMeta } from '../constants/docTypes'
 
 const props = defineProps<{
@@ -13,7 +14,7 @@ const emit = defineEmits<{ (e: 'select', id: string): void }>()
 interface Group {
   type: DocType
   label: string
-  icon: string
+  icon: LucideIcon
   order: number
   docs: BmadDocument[]
 }
@@ -61,7 +62,7 @@ function toggle(type: DocType) {
     <div v-for="g in groups" :key="g.type" class="doc-group">
       <button class="doc-group-header" @click="toggle(g.type)">
         <span class="chev">{{ collapsed.has(g.type) ? '▸' : '▾' }}</span>
-        <span class="doc-group-icon">{{ g.icon }}</span>
+        <component :is="g.icon" class="doc-group-icon" :size="15" :stroke-width="2" />
         <span class="doc-group-label">{{ g.label }}</span>
         <span class="doc-group-count">{{ g.docs.length }}</span>
       </button>
@@ -104,7 +105,7 @@ function toggle(type: DocType) {
 }
 .doc-group-header:hover { color: var(--text-0); }
 .chev { color: var(--text-3); width: 0.8em; }
-.doc-group-icon { font-size: 0.85rem; }
+.doc-group-icon { flex-shrink: 0; color: var(--text-2); }
 .doc-group-label { flex: 1; text-align: left; }
 .doc-group-count {
   color: var(--text-3);
