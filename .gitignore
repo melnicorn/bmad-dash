@@ -5,6 +5,10 @@ bmad-visio/
 .planning/
 _bmad-output/
 _bmad-output/*
+# ...except the canned fixtures under examples/, which are committed on purpose.
+!examples/**/_bmad-output/
+!examples/**/_bmad-output/*
+!examples/**/_bmad-output/**
 .claude/
 # npm lockfile — this project uses pnpm (see packageManager in package.json)
 package-lock.json
