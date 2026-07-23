@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { renderMarkdown } from '../utils/markdown'
+import { extractMermaidBlocks, renderMarkdown } from '../utils/markdown'
 import { makeSlugger } from '../utils/slug'
+import MermaidDiagram from './MermaidDiagram.vue'
 
 const props = defineProps<{
   source: string
@@ -13,10 +14,26 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: 'navigate', path: string): void }>()
 
-const html = computed(() => {
+type Segment = { type: 'html'; html: string } | { type: 'mermaid'; code: string }
+
+const MERMAID_PLACEHOLDER = /<div data-mermaid-idx="(\d+)"><\/div>/g
+
+const segments = computed<Segment[]>(() => {
   const md = props.filter ? props.filter(props.source) : props.source
-  const rendered = renderMarkdown(md)
-  return postProcess(rendered)
+  const { text: stripped, blocks } = extractMermaidBlocks(md)
+  const html = postProcess(renderMarkdown(stripped))
+
+  const result: Segment[] = []
+  let lastIndex = 0
+  MERMAID_PLACEHOLDER.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = MERMAID_PLACEHOLDER.exec(html))) {
+    if (match.index > lastIndex) result.push({ type: 'html', html: html.slice(lastIndex, match.index) })
+    result.push({ type: 'mermaid', code: blocks[Number(match[1])] ?? '' })
+    lastIndex = MERMAID_PLACEHOLDER.lastIndex
+  }
+  if (lastIndex < html.length) result.push({ type: 'html', html: html.slice(lastIndex) })
+  return result
 })
 
 // Add heading anchor ids (for TOC deep-linking) and tag internal doc links.
@@ -49,7 +66,12 @@ function onClick(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="md-pane" @click="onClick" v-html="html"></div>
+  <div class="md-pane" @click="onClick">
+    <template v-for="(seg, i) in segments" :key="i">
+      <div v-if="seg.type === 'html'" class="md-segment" v-html="seg.html"></div>
+      <MermaidDiagram v-else :code="seg.code" />
+    </template>
+  </div>
 </template>
 
 <style scoped>
@@ -59,7 +81,9 @@ function onClick(e: MouseEvent) {
   color: var(--text-1);
 }
 
+.md-segment { display: contents; }
 .md-pane :deep(> *:first-child) { margin-top: 0; }
+.md-pane :deep(> *:first-child > *:first-child) { margin-top: 0; }
 
 .md-pane :deep(h1) {
   font-size: 1.6rem;
