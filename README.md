@@ -2,11 +2,11 @@
 
 *An unofficial, experimental dashboard for the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD).*
 
-Visualize BMAD epics, user stories, **and the full set of planning documents** (PRD, architecture, briefs, UX designs, specs, retrospectives, and more) from a project's `.md` files on a localhost dashboard. Optionally uses local AI (Transformers.js) to match git commits to stories.
+Visualize BMAD epics, user stories, **and the full set of planning documents** (PRD, architecture, briefs, UX designs, specs, retrospectives, and more) from a project's `.md` files on a localhost dashboard, with **rendered Mermaid diagrams** and a **light / dark / system theme**. Optionally uses local AI (Transformers.js) to match git commits to stories.
 
 [Screenshots](#screenshots)
 
-> `bmad-dash` is a fork of [`bmad-visio`](https://github.com/williammesi/bmad-visio) by William Mesiti, extended with full document visibility, cross-linking, sprint-status integration, and filtering.
+> `bmad-dash` is a fork of [`bmad-visio`](https://github.com/williammesi/bmad-visio) by William Mesiti, extended with full document visibility, cross-linking, sprint-status integration, filtering, Mermaid diagram rendering, and a light/dark/system theme.
 
 ## Quick Start
 
@@ -29,6 +29,8 @@ Run from your project root. It reads your BMAD install config to locate artifact
 - **Drag & drop** — Move stories or epics between columns; writes status back to the `.md` file **and** `sprint-status.yaml`
 - **Story detail** — Acceptance criteria, tasks with checkboxes, progress ring, related commits with a "why did this match?" signal breakdown
 - **Documents browser** — Browse and read every BMAD document, grouped by type and initiative, with a table of contents and rendered Markdown — no more opening raw files
+- **Mermaid diagrams** — Diagrams in Markdown render inline, with pan/zoom controls (scroll or drag, or +/−/reset buttons) plus expand and fullscreen modes; they follow the active light/dark theme
+- **Theme** — Light, dark, or system (follows your OS) — toggle in the top bar, persisted across sessions with no flash on load; code blocks and Mermaid diagrams re-theme to match
 - **Cross-linking** — Follow a document's `inputDocuments` graph (upstream inputs and downstream "used by" backlinks), jump from an epic to its dependencies and requirements, and click through internal `.md` links in-app
 - **Filtering** — Hide completed epics or stories and text-filter across the sidebar, overview, and boards (persisted across sessions)
 - **Traceability** — Epic dependency edges (`Depends on: Epic N`) and the FR Coverage Map parsed from `epics.md`
@@ -111,3 +113,15 @@ The kanban board displays stories across four columns: To Do, Active, Ready for 
 The story detail view shows acceptance criteria, tasks with checkboxes, a progress ring, and related git commits.
 
 ![Story Detail View](screenshots/STORYDETAILVIEW.png)
+
+### Documents & Mermaid
+
+The documents browser groups every BMAD document by type and initiative, renders Markdown with a table of contents, and draws Mermaid diagrams inline with pan/zoom, expand, and fullscreen controls.
+
+![Documents browser with Mermaid diagram — dark](screenshots/DOCUMENTS.png)
+
+### Light Theme
+
+Light, dark, and system themes are available from the top-bar toggle and persist across sessions; code blocks and Mermaid diagrams re-theme to match.
+
+![Documents browser — light theme](screenshots/DOCUMENTS_LIGHT.png)

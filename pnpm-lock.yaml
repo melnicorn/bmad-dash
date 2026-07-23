@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@lucide/vue':
+        specifier: ^1.26.0
+        version: 1.26.0(vue@3.5.40(typescript@5.9.3))
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -503,6 +506,11 @@ packages:
 
   '@kwsites/promise-deferred@1.1.1':
     resolution: {integrity: sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==}
+
+  '@lucide/vue@1.26.0':
+    resolution: {integrity: sha512-jz00zLm8+i7VzBuQTbmjChIvIKehaIK5YbOVC+bab7qTh4JTkCd0XJQ4l5TY57gT08fMPVlvUITROB/vm/xImA==}
+    peerDependencies:
+      vue: '>=3.0.1'
 
   '@mermaid-js/parser@1.2.0':
     resolution: {integrity: sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==}
@@ -2631,6 +2639,10 @@ snapshots:
       - supports-color
 
   '@kwsites/promise-deferred@1.1.1': {}
+
+  '@lucide/vue@1.26.0(vue@3.5.40(typescript@5.9.3))':
+    dependencies:
+      vue: 3.5.40(typescript@5.9.3)
 
   '@mermaid-js/parser@1.2.0':
     dependencies:

@@ -8,7 +8,8 @@ import json from 'highlight.js/lib/languages/json'
 import css from 'highlight.js/lib/languages/css'
 import xml from 'highlight.js/lib/languages/xml'
 import python from 'highlight.js/lib/languages/python'
-import 'highlight.js/styles/github-dark.css'
+// The active highlight.js stylesheet is injected dynamically by the theme store
+// (see utils/hljs-theme.ts) so code blocks follow light/dark mode.
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)

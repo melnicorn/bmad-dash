@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router/index'
 import { useProjectStore } from './stores/project'
+import { useThemeStore } from './stores/theme'
 import './style.css'
 
 // ─── App Bootstrap ───
@@ -11,6 +12,11 @@ const pinia = createPinia()
 
 app.use(pinia)
 app.use(router)
+
+// ─── Theme ───
+// Reconcile the persisted preference with the DOM (the index.html inline script
+// set an initial data-theme to avoid a flash) and start live OS-scheme tracking.
+useThemeStore().init()
 
 // ─── Data Hydration ───
 // Production: Express injects window.__INITIAL_DATA__ before </head>

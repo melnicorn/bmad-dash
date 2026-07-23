@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectStore } from '../stores/project'
+import { ArrowLeft, TriangleAlert } from '@lucide/vue'
 import type { CommitMapping } from '../../types/index'
 import MarkdownPane from '../components/MarkdownPane.vue'
 
@@ -174,7 +175,10 @@ watch(storyId, () => {
     <div class="story-header">
 
       <!-- Back breadcrumb -->
-      <button class="breadcrumb" @click="goBack">← {{ epic?.title }}</button>
+      <button class="breadcrumb" @click="goBack">
+        <ArrowLeft :size="14" :stroke-width="2" />
+        {{ epic?.title }}
+      </button>
 
       <!-- Identifier badges -->
       <div class="story-meta">
@@ -190,7 +194,7 @@ watch(storyId, () => {
           v-if="story.statusConflict"
           class="meta-badge conflict"
           title="sprint-status.yaml and the story file disagree on this story's status"
-        >⚠ status drift</span>
+        ><TriangleAlert :size="12" :stroke-width="2" /> status drift</span>
       </div>
 
       <!-- Title -->
@@ -430,7 +434,9 @@ watch(storyId, () => {
   cursor: pointer;
   padding: 0;
   margin-bottom: 1.25rem;
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   transition: color 0.15s;
 }
 .breadcrumb:hover { color: var(--text-1); }
@@ -462,6 +468,9 @@ watch(storyId, () => {
 }
 
 .meta-badge.conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--review);
   background: var(--review-bg);
   border-color: var(--review);

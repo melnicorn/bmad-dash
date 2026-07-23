@@ -14,11 +14,14 @@
       v-if="story.statusConflict"
       class="drift-flag"
       title="sprint-status.yaml and the story file disagree on this story's status"
-    >⚠</span>
+    >
+      <TriangleAlert :size="13" :stroke-width="2" aria-label="Status drift" />
+    </span>
   </div>
 </template>
 
 <script setup lang="ts">
+import { TriangleAlert } from '@lucide/vue'
 import type { UserStory } from '../../types/index'
 
 // ─── Props ───
@@ -35,9 +38,10 @@ defineEmits<{
 
 <style scoped>
 .drift-flag {
+  display: inline-flex;
+  align-items: center;
   margin-left: auto;
   color: var(--review);
-  font-size: 0.72rem;
   flex-shrink: 0;
 }
 

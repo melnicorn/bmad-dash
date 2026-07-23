@@ -1,6 +1,6 @@
 {
   "name": "@melnicorn/bmad-dash",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Visualize BMAD Method epics, stories & documents with AI-powered git commit matching",
   "type": "module",
   "main": "dist/cli.js",
@@ -59,6 +59,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@lucide/vue": "^1.26.0",
     "chokidar": "^5.0.0",
     "express": "^4.21.2",
     "highlight.js": "^11.11.1",

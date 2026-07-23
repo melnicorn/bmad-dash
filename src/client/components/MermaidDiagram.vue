@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import svgPanZoomFactory from 'svg-pan-zoom'
+import { storeToRefs } from 'pinia'
+import { useThemeStore } from '../stores/theme'
 
 // The bundled svg-pan-zoom types declare the module export as an `Instance`
 // rather than the factory function it actually is at runtime.
@@ -10,6 +12,8 @@ const svgPanZoom = svgPanZoomFactory as unknown as (
 ) => SvgPanZoom.Instance
 
 const props = defineProps<{ code: string }>()
+
+const { resolved: resolvedTheme } = storeToRefs(useThemeStore())
 
 const svg = ref('')
 const error = ref('')
@@ -94,37 +98,59 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && expanded.value) toggleExpand()
 }
 
+// Mermaid can't read CSS variables, so we mirror the app palette here per theme
+// and re-initialize on each render to follow light/dark mode.
+const MERMAID_THEME_VARS = {
+  dark: {
+    background: '#0e1015',
+    primaryColor: '#151820',
+    primaryTextColor: '#f0f2f5',
+    primaryBorderColor: '#3a4155',
+    lineColor: '#7c849a',
+    secondaryColor: '#1c2029',
+    tertiaryColor: '#151820',
+    textColor: '#c1c7d4',
+    mainBkg: '#151820',
+    nodeBorder: '#3a4155',
+    clusterBkg: '#0e1015',
+    clusterBorder: '#252a35',
+    edgeLabelBackground: '#0e1015',
+    fontFamily: 'JetBrains Mono, monospace'
+  },
+  light: {
+    background: '#ffffff',
+    primaryColor: '#eef0f4',
+    primaryTextColor: '#1a1d24',
+    primaryBorderColor: '#b6bdcc',
+    lineColor: '#6a7285',
+    secondaryColor: '#e3e6ec',
+    tertiaryColor: '#f7f8fa',
+    textColor: '#3a4051',
+    mainBkg: '#eef0f4',
+    nodeBorder: '#b6bdcc',
+    clusterBkg: '#f7f8fa',
+    clusterBorder: '#d5d9e2',
+    edgeLabelBackground: '#ffffff',
+    fontFamily: 'JetBrains Mono, monospace'
+  }
+} as const
+
 let mermaidPromise: Promise<typeof import('mermaid')> | null = null
 
 function loadMermaid() {
   if (!mermaidPromise) {
-    mermaidPromise = import('mermaid').then((mod) => {
-      mod.default.initialize({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: 'base',
-        fontFamily: 'JetBrains Mono, monospace',
-        themeVariables: {
-          background: '#0e1015',
-          primaryColor: '#151820',
-          primaryTextColor: '#f0f2f5',
-          primaryBorderColor: '#3a4155',
-          lineColor: '#7c849a',
-          secondaryColor: '#1c2029',
-          tertiaryColor: '#151820',
-          textColor: '#c1c7d4',
-          mainBkg: '#151820',
-          nodeBorder: '#3a4155',
-          clusterBkg: '#0e1015',
-          clusterBorder: '#252a35',
-          edgeLabelBackground: '#0e1015',
-          fontFamily: 'JetBrains Mono, monospace'
-        }
-      })
-      return mod
-    })
+    mermaidPromise = import('mermaid')
   }
-  return mermaidPromise
+  return mermaidPromise.then((mod) => {
+    mod.default.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      fontFamily: 'JetBrains Mono, monospace',
+      themeVariables: MERMAID_THEME_VARS[resolvedTheme.value]
+    })
+    return mod
+  })
 }
 
 let renderToken = 0
@@ -156,6 +182,8 @@ onMounted(() => {
   document.addEventListener('fullscreenchange', onFullscreenChange)
 })
 watch(() => props.code, render)
+// Re-render with the matching palette when the theme changes.
+watch(resolvedTheme, render)
 onBeforeUnmount(() => {
   destroyPanZoom()
   window.removeEventListener('resize', handleResize)

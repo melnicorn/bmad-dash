@@ -3,13 +3,13 @@
     <!-- ─── Top-level sections ─── -->
     <div class="nav-sections">
       <button class="nav-link" :class="{ active: isOverviewActive }" @click="goTo('overview')">
-        <span class="nav-ico">▚</span> Overview
+        <LayoutDashboard class="nav-ico" :size="16" :stroke-width="2" /> Overview
       </button>
       <button class="nav-link" :class="{ active: route.name === 'epicBoard' }" @click="goTo('epicBoard')">
-        <span class="nav-ico">▦</span> Epic Board
+        <LayoutGrid class="nav-ico" :size="16" :stroke-width="2" /> Epic Board
       </button>
       <button class="nav-link" :class="{ active: route.name === 'docs' }" @click="goTo('docs')">
-        <span class="nav-ico">📄</span> Documents
+        <Files class="nav-ico" :size="16" :stroke-width="2" /> Documents
         <span v-if="store.documents.length" class="nav-count">{{ store.documents.length }}</span>
       </button>
     </div>
@@ -70,6 +70,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectStore } from '../stores/project'
 import { useFilterStore } from '../stores/filters'
+import { LayoutDashboard, LayoutGrid, Files } from '@lucide/vue'
 import SidebarEpicItem from './SidebarEpicItem.vue'
 import SidebarStoryItem from './SidebarStoryItem.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
@@ -229,7 +230,7 @@ watch(() => store.selectedEpicId, (id) => {
 }
 .nav-link:hover { background: var(--bg-3); color: var(--text-0); }
 .nav-link.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-.nav-ico { font-size: 0.85rem; width: 1.1em; text-align: center; }
+.nav-ico { flex-shrink: 0; }
 .nav-count {
   margin-left: auto;
   font-size: 0.7rem;
