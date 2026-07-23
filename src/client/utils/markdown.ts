@@ -35,3 +35,20 @@ marked.use(markedHighlight({
 export function renderMarkdown(text: string): string {
   return marked(text, { gfm: true, breaks: false }) as string
 }
+
+/**
+ * Pull ```mermaid fenced blocks out of the raw markdown before it hits `marked`.
+ * Mermaid syntax (`-->`, `<br/>`, `<|--`, ...) would otherwise get mangled by
+ * marked's HTML-escaping/highlighting pipeline. Each block is replaced with an
+ * HTML placeholder div that marked/GFM passes through untouched as a raw HTML
+ * block, to be swapped for a rendered diagram after `renderMarkdown` runs.
+ */
+export function extractMermaidBlocks(text: string): { text: string; blocks: string[] } {
+  const blocks: string[] = []
+  const stripped = text.replace(/```mermaid[ \t]*\r?\n([\s\S]*?)\r?\n?```/g, (_match, code: string) => {
+    const idx = blocks.length
+    blocks.push(code)
+    return `\n<div data-mermaid-idx="${idx}"></div>\n`
+  })
+  return { text: stripped, blocks }
+}
