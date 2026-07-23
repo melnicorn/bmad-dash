@@ -13,7 +13,10 @@ const props = defineProps<{ code: string }>()
 
 const svg = ref('')
 const error = ref('')
+const containerEl = ref<HTMLDivElement | null>(null)
 const viewportEl = ref<HTMLDivElement | null>(null)
+const expanded = ref(false)
+const isFullscreen = ref(false)
 
 let panZoom: SvgPanZoom.Instance | null = null
 
@@ -51,6 +54,44 @@ function resetView() {
   panZoom?.resetPan()
   panZoom?.fit()
   panZoom?.center()
+}
+
+// "Expand" grows the diagram in place (a fixed-position overlay); "fullscreen"
+// hands the container to the browser's native Fullscreen API. Only one at a time.
+function toggleExpand() {
+  if (isFullscreen.value) return
+  expanded.value = !expanded.value
+  document.body.style.overflow = expanded.value ? 'hidden' : ''
+  nextTick(handleResize)
+}
+
+async function togglePopout() {
+  if (!containerEl.value) return
+  if (document.fullscreenElement) {
+    await document.exitFullscreen()
+    return
+  }
+  if (expanded.value) {
+    expanded.value = false
+    document.body.style.overflow = ''
+    await nextTick()
+    handleResize()
+  }
+  try {
+    await containerEl.value.requestFullscreen()
+  } catch {
+    // Fullscreen can be denied (embedded iframe, permissions policy, etc.) — the
+    // diagram already fell back to its normal inline layout above.
+  }
+}
+
+function onFullscreenChange() {
+  isFullscreen.value = document.fullscreenElement === containerEl.value
+  nextTick(handleResize)
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && expanded.value) toggleExpand()
 }
 
 let mermaidPromise: Promise<typeof import('mermaid')> | null = null
@@ -111,16 +152,26 @@ async function render() {
 onMounted(() => {
   render()
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
 })
 watch(() => props.code, render)
 onBeforeUnmount(() => {
   destroyPanZoom()
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  if (expanded.value) document.body.style.overflow = ''
 })
 </script>
 
 <template>
-  <div class="mermaid-diagram">
+  <div v-if="expanded" class="mermaid-backdrop" @click="toggleExpand"></div>
+  <div
+    ref="containerEl"
+    class="mermaid-diagram"
+    :class="{ 'is-expanded': expanded }"
+  >
     <div v-if="error" class="mermaid-error">
       <strong>Mermaid diagram failed to render:</strong> {{ error }}
       <pre>{{ code }}</pre>
@@ -130,6 +181,57 @@ onBeforeUnmount(() => {
         <button type="button" title="Zoom out" @click="zoomOut">&minus;</button>
         <button type="button" title="Reset view" @click="resetView">&#8862;</button>
         <button type="button" title="Zoom in" @click="zoomIn">+</button>
+        <button
+          type="button"
+          class="icon-btn"
+          :title="expanded ? 'Exit expanded view' : 'Expand'"
+          @click="toggleExpand"
+        >
+          <svg v-if="expanded" viewBox="0 0 16 16" width="11" height="11">
+            <path
+              d="M3 3l10 10M13 3L3 13"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 16 16" width="11" height="11">
+            <path
+              d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'"
+          @click="togglePopout"
+        >
+          <svg v-if="isFullscreen" viewBox="0 0 16 16" width="11" height="11">
+            <path
+              d="M2 2l4 4M14 2l-4 4M2 14l4-4M14 14l-4-4"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 16 16" width="11" height="11">
+            <path
+              d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-dasharray="2 2"
+            />
+          </svg>
+        </button>
       </div>
       <div ref="viewportEl" class="mermaid-viewport" v-html="svg"></div>
     </template>
@@ -144,6 +246,23 @@ onBeforeUnmount(() => {
   border-radius: var(--radius);
   background: var(--bg-1);
   overflow: hidden;
+}
+.mermaid-diagram.is-expanded {
+  position: fixed;
+  inset: 2rem;
+  z-index: 200;
+  margin-bottom: 0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.mermaid-diagram:fullscreen {
+  border-radius: 0;
+}
+
+.mermaid-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .mermaid-toolbar {
@@ -178,6 +297,10 @@ onBeforeUnmount(() => {
 .mermaid-viewport {
   height: 420px;
   cursor: grab;
+}
+.mermaid-diagram.is-expanded .mermaid-viewport,
+.mermaid-diagram:fullscreen .mermaid-viewport {
+  height: 100%;
 }
 .mermaid-viewport:active {
   cursor: grabbing;
