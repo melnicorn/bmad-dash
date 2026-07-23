@@ -1,6 +1,6 @@
 {
   "name": "@melnicorn/bmad-dash",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Visualize BMAD Method epics, stories & documents with AI-powered git commit matching",
   "type": "module",
   "main": "dist/cli.js",
@@ -16,6 +16,7 @@
   "scripts": {
     "test": "vitest run",
     "dev": "tsx src/cli.ts",
+    "dev:examples": "tsx src/cli.ts examples/sample-project --no-git",
     "build:server": "tsc",
     "build:client": "vite build",
     "build": "pnpm run build:server && pnpm run build:client",
@@ -70,6 +71,7 @@
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
     "simple-git": "^3.33.0",
+    "svg-pan-zoom": "^3.6.2",
     "unified": "^11.0.5",
     "vue": "^3.5.30",
     "vue-router": "^5.0.3",
