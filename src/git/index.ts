@@ -221,7 +221,7 @@ const RERANK_CEILING = 0.55;      // always re-rank if top score is below this
 export async function matchCommitsToStories(
   project: BmadProject,
   projectDir: string,
-  opts?: { skipEmbedding?: boolean }
+  opts?: { skipEmbedding?: boolean; heuristicsOnly?: boolean }
 ): Promise<CommitMapping[]> {
   const allStories: UserStory[] = [];
   for (const epic of project.epics) allStories.push(...epic.stories);
@@ -252,17 +252,25 @@ export async function matchCommitsToStories(
   }
   if (opts?.skipEmbedding) return Object.values(gitmap.mappings);
 
-  // Check if @huggingface/transformers is installed (it's an optional dep)
-  if (!(await checkTransformers())) {
+  // Decide whether to use the embedded AI model. --no-ai runs a fully-offline
+  // heuristic pass (explicit story-ID references, keyword & path overlap, diff
+  // signal) with no model load and no network access — useful when
+  // huggingface.co is unreachable (e.g. behind a corporate proxy). Otherwise we
+  // need the optional @huggingface/transformers dependency.
+  let useModel = false;
+  if (opts?.heuristicsOnly) {
+    console.log("  Heuristic-only matching (--no-ai): no AI model, no network access");
+  } else if (await checkTransformers()) {
+    useModel = true;
+  } else {
     console.log("  @huggingface/transformers not installed — run: npm install @huggingface/transformers");
     console.log("     Skipping AI commit matching. Dashboard will work without it.");
     return Object.values(gitmap.mappings);
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // STAGE 1: Bi-encoder embedding — fast retrieval
+  // STAGE 1: Bi-encoder embedding — fast retrieval (skipped in --no-ai mode)
   // ═══════════════════════════════════════════════════════════════════
-  const embed = await getEmbedFn();
   const storyIds = allStories.map((s) => s.id);
   const storyIdSet = new Set(storyIds);
   const storyTexts = allStories.map((s) => storyEmbedText(s));
@@ -279,15 +287,24 @@ export async function matchCommitsToStories(
     })
   );
 
-  console.log(`  Embedding ${storyTexts.length} stories...`);
-  const storyVecs = await embed(storyTexts);
-
-  console.log(`  Matching ${newCommits.length} new commits...`);
   // Phase 1: pre-extract signals for all commits (needed for embed text + suppression gate)
   const allSignals = newCommits.map((c) => extractCommitSignals(c.message, c.body, storyIdSet));
   // SIG-07: Use clean embed text (stopword-stripped) instead of raw commitEmbedText
   const commitTexts = allSignals.map((s) => s.cleanEmbedText);
-  const commitVectors = await embed(commitTexts);
+
+  // Embeddings only run when the AI model is active; heuristic mode leaves the
+  // vectors empty and every embeddingScore falls back to 0.
+  let storyVecs: number[][] = [];
+  let commitVectors: number[][] = [];
+  if (useModel) {
+    const embed = await getEmbedFn();
+    console.log(`  Embedding ${storyTexts.length} stories...`);
+    storyVecs = await embed(storyTexts);
+    console.log(`  Matching ${newCommits.length} new commits...`);
+    commitVectors = await embed(commitTexts);
+  } else {
+    console.log(`  Matching ${newCommits.length} new commits (heuristics only)...`);
+  }
 
   // Diff signal: extract +lines from each new commit's diff
   console.log(`  Extracting diff +lines for ${newCommits.length} commits...`);
@@ -329,7 +346,7 @@ export async function matchCommitsToStories(
       continue;
     }
 
-    const cVec = commitVectors[ci];
+    const cVec = useModel ? commitVectors[ci] : null;
     const fullText = `${commit.message} ${commit.body}`;
     const commitTokens = tokenize(fullText);
 
@@ -349,7 +366,7 @@ export async function matchCommitsToStories(
       }
       return {
         storyId: sid,
-        embeddingScore: dotProduct(cVec, storyVecs[si]),
+        embeddingScore: cVec ? dotProduct(cVec, storyVecs[si]) : 0,
         idBoost: referencedIds.has(sid) ? 1.0 : 0.0,
         // keywordScore takes the higher of word-token Jaccard and path-token Jaccard (SIG-06)
         keywordScore: Math.max(jaccardSimilarity(commitTokens, storyTokens[si]), pathOverlapScore),
@@ -383,9 +400,12 @@ export async function matchCommitsToStories(
   // ═══════════════════════════════════════════════════════════════════
   // STAGE 3: Zero-shot NLI re-ranking (only for ambiguous matches)
   // ═══════════════════════════════════════════════════════════════════
-  const ambiguous = allCandidates.filter((cc) => cc.needsRerank);
+  // NLI needs the model; heuristic mode never re-ranks.
+  const ambiguous = useModel ? allCandidates.filter((cc) => cc.needsRerank) : [];
 
-  if (ambiguous.length > 0) {
+  if (!useModel) {
+    // Heuristic-only: explicit story-ID references still match, weaker signals stay as-is.
+  } else if (ambiguous.length > 0) {
     console.log(`  Re-ranking ${ambiguous.length}/${newCommits.length} ambiguous commits with NLI...`);
     const classify = await getClassifyFn();
 
@@ -456,12 +476,18 @@ export async function matchCommitsToStories(
     };
   }
 
-  saveGitMap(projectDir, gitmap);
+  // Don't persist heuristic results: they'd be indistinguishable from
+  // (higher-quality) model results in the cache and would suppress a later
+  // full run. Heuristics are cheap, so recomputing each launch is fine.
+  if (useModel) saveGitMap(projectDir, gitmap);
 
   const allMappings = Object.values(gitmap.mappings);
   const matched = allMappings.filter((m) => m.storyId !== null).length;
-  const reranked = ambiguous.length;
-  console.log(`  ${matched}/${allMappings.length} commits matched (${reranked} re-ranked by NLI)`);
+  if (useModel) {
+    console.log(`  ${matched}/${allMappings.length} commits matched (${ambiguous.length} re-ranked by NLI)`);
+  } else {
+    console.log(`  ${matched}/${allMappings.length} commits matched (heuristics only, not cached)`);
+  }
 
   return allMappings;
 }

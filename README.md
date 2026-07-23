@@ -55,6 +55,18 @@ The dashboard will then:
 
 First run downloads models locally. Everything runs on-device, no API keys needed.
 
+### Offline / behind a proxy (`--no-ai`)
+
+The first run fetches the models from `huggingface.co`. If that host is blocked (e.g. a corporate proxy), the download fails. Run with `--no-ai` (alias `--no-model`) to match commits **entirely offline** — no model download, no network access:
+
+```bash
+npx @melnicorn/bmad-dash --no-ai
+```
+
+Heuristic mode still matches commits that **explicitly reference a story** (e.g. `STORY-1.2`, `#1.2` in the message) and surfaces weaker keyword/path/diff signals, but without the embedding + NLI stages it won't catch matches that rely on semantic similarity alone. These results are computed fresh each launch and are **not** written to `gitmap.json`, so a later online run still gets a full, cached AI pass.
+
+Use `--no-git` instead if you want to skip commit matching altogether.
+
 ## Options
 
 ```
@@ -65,7 +77,9 @@ Arguments:
 
 Options:
   -p, --port <n>    Port number (default: 3334)
-  --no-git          Skip git commit matching
+  --no-git          Skip git commit matching entirely
+  --no-ai           Match commits offline via heuristics only — no AI model
+                    download (alias: --no-model)
   --debug           Dump parsed data as JSON and exit
   -h, --help        Show help
 ```

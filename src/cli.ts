@@ -21,7 +21,10 @@ if (args.includes("--help") || args.includes("-h")) {
 
   Options:
     -p, --port <n>    Port number (default: 3334)
-    --no-git          Skip git commit matching
+    --no-git          Skip git commit matching entirely
+    --no-ai           Match commits offline via heuristics only — no AI model
+                      download (use behind a proxy that blocks huggingface.co).
+                      Alias: --no-model
     --debug           Dump parsed data as JSON and exit
     -h, --help        Show this help
 
@@ -36,6 +39,7 @@ const portIdx = args.findIndex((a) => a === "-p" || a === "--port");
 const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : 3334;
 const debug = args.includes("--debug");
 const noGit = args.includes("--no-git");
+const noAi = args.includes("--no-ai") || args.includes("--no-model");
 
 const __cliDirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__cliDirname, "public");
@@ -60,7 +64,7 @@ if (debug) {
 // Git matching
 if (!noGit) {
   try {
-    const mappings = await matchCommitsToStories(project, dir);
+    const mappings = await matchCommitsToStories(project, dir, { heuristicsOnly: noAi });
     project.commitMappings = mappings;
   } catch (err: any) {
     console.log(`  Git matching skipped: ${err.message}`);
