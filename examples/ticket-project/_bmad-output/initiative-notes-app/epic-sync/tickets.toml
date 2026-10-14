@@ -1,0 +1,43 @@
+# epic-sync — agreed children in build order. Table order is the build order; id is not.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Push a note to the service"
+description = "Uploads a changed note, with its generation counter, whenever the network is up."
+verify = "A note written on one device is visible in the service within a second of coming online."
+covers = ["CAP-2"]
+after = ["1.2"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Pull notes on launch and on a timer"
+description = "Fetches anything newer than the local generation and writes it through the same atomic save."
+verify = "A note written on the other device appears here within the poll interval."
+covers = ["CAP-2"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Resolve two offline edits"
+description = "Merges concurrent edits per paragraph, keeping both sides when they cannot be merged."
+verify = "Editing one note offline on both devices and reconnecting keeps both edits."
+covers = ["CAP-3"]
+after = [2, "1.4"]
+hitl = false
+risk = "high"
+unknown = "Whether per-paragraph merge is enough, or the format needs per-field history."
+
+[[entry]]
+id = 5
+type = "bug"
+title = "Pull overwrites an in-flight edit"
+description = "A pull landing mid-keystroke can clobber what is being typed."
+after = [2]
+risk = "high"

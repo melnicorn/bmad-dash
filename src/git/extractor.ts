@@ -162,16 +162,21 @@ export function extractCommitSignals(
 
 // ─── SIG-04: Broadened story ID extraction ───────────────────────
 //
-// Matches: #5, US-3, STORY-3.2, story 3, 3.2 (plain decimal)
+// Matches: #5, US-3, STORY-3.2, story 3, ticket 3.4, 3.2 (plain decimal)
 // All candidates verified against knownStoryIds to prevent false positives
 // (e.g. version numbers like v1.2 are excluded unless 1.2 is an actual story ID)
+//
+// The `ticket` forms are how the BMAD 6.13+ builds name their work:
+// "(ticket 3.4)" and "ticket 2.13" both appear in real history. An entry id
+// may carry a letter ("3.6a"), so the trailing letter is optional throughout.
 
 const STORY_ID_PATTERNS: RegExp[] = [
-  /\bSTORY-(\d+(?:\.\d+)*)\b/gi,     // STORY-3.2  or  story-3.2
-  /\bUS-(\d+(?:\.\d+)*)\b/gi,         // US-3
-  /#(\d+(?:\.\d+)*)\b/g,              // #5  or  #3.2
-  /\bstory\s+(\d+(?:\.\d+)*)\b/gi,   // story 3  or  story 3.2
-  /\b(\d+\.\d+)\b/g,                  // 3.2 — plain decimal; filtered by knownStoryIds
+  /\bSTORY-(\d+(?:\.\d+)*[a-z]?)\b/gi,       // STORY-3.2  or  story-3.2
+  /\bUS-(\d+(?:\.\d+)*)\b/gi,                 // US-3
+  /#(\d+(?:\.\d+)*)\b/g,                      // #5  or  #3.2
+  /\bstory\s+(\d+(?:\.\d+)*[a-z]?)\b/gi,     // story 3  or  story 3.2
+  /\btickets?[\s:#-]+(\d+(?:\.\d+)*[a-z]?)\b/gi,  // ticket 3.4, (ticket 3.4), ticket: 3.4
+  /\b(\d+\.\d+[a-z]?)\b/g,                    // 3.2 — plain decimal; filtered by knownStoryIds
 ];
 
 export function extractStoryIdReferences(

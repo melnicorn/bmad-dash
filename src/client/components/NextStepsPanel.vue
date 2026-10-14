@@ -21,10 +21,16 @@ async function copyCommand() {
   } catch { /* clipboard unavailable */ }
 }
 
-// Map a sprint-status story key (e.g. "30-1-slug") to its story route.
+// Map the recommendation's target to its story route: a sprint-status story
+// key ("30-1-slug") in the v6 layouts, or a ticket ref ("3.4") in a 6.13+ tree.
 const targetRoute = computed(() => {
   const id = next.value?.targetId
   if (!id) return null
+
+  // A ticket ref is already the story id the ticket tree projects.
+  const byRef = store.epics.find(e => e.stories.some(s => s.id === id))
+  if (byRef) return { name: 'storyDetail', params: { epicId: byRef.id, storyId: id } }
+
   const m = id.match(/^(\d+)-(\d+)-/)
   if (!m) return null
   const epicId = `EPIC-${m[1].padStart(2, '0')}`
@@ -33,6 +39,13 @@ const targetRoute = computed(() => {
   if (!epic?.stories.some(s => s.id === storyId)) return null
   return { name: 'storyDetail', params: { epicId, storyId } }
 })
+
+// ─── 6.13+ ticket tree summary ───
+const tickets = computed(() => store.ticketSummary)
+const readyCount = computed(() => tickets.value?.readyToStart.length ?? 0)
+const blockedCount = computed(() => tickets.value?.blocked.length ?? 0)
+const inProgressCount = computed(() => tickets.value?.inProgress.length ?? 0)
+const refineCount = computed(() => tickets.value?.readyToRefine.length ?? 0)
 
 function openTarget() {
   if (targetRoute.value) router.push(targetRoute.value as any)
@@ -46,6 +59,7 @@ function openTarget() {
       <span v-if="store.sprintStatus?.lastUpdated" class="ns-updated">
         sprint updated {{ store.sprintStatus.lastUpdated }}
       </span>
+      <span v-else-if="tickets" class="ns-updated">{{ tickets.initiative }}</span>
     </div>
 
     <div v-if="allDone" class="ns-done">
@@ -55,6 +69,20 @@ function openTarget() {
 
     <template v-else>
       <p class="ns-recommend">{{ next.label }}</p>
+
+      <!-- What `tickets.py next` reports, at a glance -->
+      <div v-if="tickets" class="ns-ticket-counts">
+        <span class="ns-count" :class="{ 'is-zero': !readyCount }">
+          <strong>{{ readyCount }}</strong> ready
+        </span>
+        <span v-if="refineCount" class="ns-count"><strong>{{ refineCount }}</strong> to refine</span>
+        <span class="ns-count" :class="{ 'is-zero': !inProgressCount }">
+          <strong>{{ inProgressCount }}</strong> in flight
+        </span>
+        <span class="ns-count" :class="{ 'is-blocked': blockedCount > 0 }">
+          <strong>{{ blockedCount }}</strong> blocked
+        </span>
+      </div>
       <div class="ns-actions">
         <code class="ns-command">{{ next.command }}</code>
         <button class="ns-copy" @click="copyCommand">
@@ -125,4 +153,37 @@ function openTarget() {
 .ns-risks li { font-size: 0.78rem; color: var(--text-2); display: flex; gap: 7px; align-items: flex-start; }
 .ns-risks li.warning { color: var(--review); }
 .risk-icon { flex-shrink: 0; margin-top: 1px; }
+
+/* ─── 6.13+ ticket counts ─── */
+
+.ns-ticket-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.6rem;
+}
+
+.ns-count {
+  font-size: 0.7rem;
+  color: var(--text-2);
+  padding: 0.16rem 0.42rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+
+.ns-count strong {
+  color: var(--text-0);
+  font-weight: 650;
+}
+
+.ns-count.is-zero strong { color: var(--text-2); }
+
+.ns-count.is-blocked {
+  color: var(--blocked);
+  border-color: var(--blocked);
+  background: var(--blocked-bg);
+}
+
+.ns-count.is-blocked strong { color: var(--blocked); }
 </style>

@@ -458,3 +458,37 @@ describe("new keyword coverage (T01)", () => {
     expect(extractInformalKeyword("Refactored user service")).toBe("Refactored");
   });
 });
+
+// ─── BMAD 6.13+ ticket references ───────────────────────────────────
+// A 6.13+ build names its work "(ticket 3.4)" or "ticket 2.13". Matching
+// these by regex is what gives the dashboard commit links without the
+// optional AI dependency installed.
+
+describe("extractStoryIdReferences — 6.13+ ticket refs", () => {
+  const known = new Set(["3.4", "2.13", "1.3", "3.6a"]);
+
+  it("matches a parenthesised ticket ref", () => {
+    expect(extractStoryIdReferences("Save and resume (ticket 3.4)", known)).toEqual(["3.4"]);
+  });
+
+  it("matches a bare ticket ref", () => {
+    expect(extractStoryIdReferences("Tune the generator, ticket 2.13", known)).toEqual(["2.13"]);
+  });
+
+  it("matches a colonned ticket ref", () => {
+    expect(extractStoryIdReferences("ticket: 1.3 renderer decision", known)).toEqual(["1.3"]);
+  });
+
+  it("matches a lettered entry id", () => {
+    expect(extractStoryIdReferences("fix the soft miss (ticket 3.6a)", known)).toEqual(["3.6a"]);
+  });
+
+  it("still filters refs that name no known ticket", () => {
+    expect(extractStoryIdReferences("bump to v1.2 (ticket 9.9)", known)).toEqual([]);
+  });
+
+  it("finds several refs when a commit names more than one", () => {
+    const out = extractStoryIdReferences("close ticket 3.4 and ticket 2.13", known);
+    expect(out.sort()).toEqual(["2.13", "3.4"]);
+  });
+});

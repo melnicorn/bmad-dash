@@ -27,6 +27,100 @@ export interface UserStory {
   statusSource?: StatusSource;
   /** True when sprint-status.yaml and the story file disagree on status */
   statusConflict?: boolean;
+  /** 6.13+ ticket-tree metadata; absent for the v4/v5/v6 layouts */
+  ticket?: TicketInfo;
+}
+
+// ─── 6.13+ ticket tree ──────────────────────────────────────────────
+
+/** Derived ticket state — what the board column is keyed on. */
+export type TicketState =
+  | "planned" | "backlog" | "in-progress" | "review" | "done" | "dropped";
+
+/** A prerequisite as the UI shows it. */
+export interface TicketRef {
+  /** "3.4", or an epic slug for a whole-epic gate */
+  ref: string;
+  /** Resolved title, when the prerequisite is a ticket in this tree */
+  title?: string;
+  /** Derived state of the prerequisite, when known */
+  state?: TicketState;
+  /** True when the ref names a whole epic rather than one ticket */
+  isEpic?: boolean;
+}
+
+export interface TicketInfo {
+  /** Globally unique reference, e.g. "3.4" */
+  ref: string;
+  /** Entry id within the epic, e.g. "4" */
+  entryId: string;
+  /** The epic's folder name, e.g. "epic-core-play-loop" */
+  epicSlug: string;
+  type: "story" | "spike" | "bug";
+  state: TicketState;
+  /** Status as the plan records it; "" when no build has started */
+  status: string;
+  /** Needs a human step */
+  hitl: boolean;
+  /** "low" | "medium" | "high", when the ticket proposes one */
+  risk?: string;
+  /** Requirement/capability ids this ticket covers */
+  covers: string[];
+  /** One-sentence verification from the entry */
+  verify?: string;
+  /** Notes carried by the entry (or the leaf file's Notes) */
+  notes: string[];
+  /** Reference links the entry carries */
+  references: string[];
+  /** An open question to settle before the ticket starts */
+  unknown?: string;
+  /** Needs refining before it starts (a bug, `refine = true`, or no entry) */
+  refine: boolean;
+  refined: boolean;
+  assignee?: string;
+  blockedAt?: string;
+  blockedReason?: string;
+  estimate?: string | number;
+  /** Prerequisites */
+  after: TicketRef[];
+  /** Unmet prerequisites — set when the ticket is blocked */
+  waitingOn?: TicketRef[];
+  /** Tickets waiting on this one */
+  blocks: TicketRef[];
+  /** Project-relative path of the plan file, when one exists */
+  planPath?: string;
+  /** Project-relative path of the plan file `mark` would create */
+  planTarget?: string;
+  /** Project-relative path of the leaf file, once the entry is pulled */
+  leafPath?: string;
+  /** Extra build metadata from the plan's frontmatter (route, review, ...) */
+  planMeta?: Record<string, string>;
+  /** Fields where a pulled leaf file disagrees with its entry */
+  drift?: string[];
+}
+
+export interface TicketSummary {
+  /** The active initiative's folder name */
+  initiative: string;
+  initiativeTitle?: string;
+  /** Ticket counts by derived state, plus `total` */
+  counts: Record<string, number>;
+  /** Longest remaining prerequisite chain, as refs */
+  longestRemainingChain: string[];
+  readyToStart: string[];
+  readyToRefine: string[];
+  inProgress: string[];
+  blocked: string[];
+  /** Malformed-tree notes worth showing rather than crashing on */
+  problems: string[];
+  /** A declared epic dependency that no entry of the waiting epic pins */
+  unpinnedAfter: { epic: string; after: string; needs: string }[];
+  /** An entry's `after` reaching into an epic its own epic does not declare */
+  undeclaredAfter: { epic: string; after: string; ref: string; names: string }[];
+  /** An epic that waits on one later in build order */
+  orderConflict: { epic: string; after: string }[];
+  /** Planning document folders under the initiative, e.g. "spec-numception" */
+  planningFolders: string[];
 }
 
 export type StatusSource = "sprint-status" | "file";
@@ -44,6 +138,14 @@ export interface Epic {
   requirements?: string[];
   /** Retrospective status from sprint-status.yaml: "optional" | "done" */
   retrospectiveStatus?: string;
+  /** 6.13+ only: the epic's folder name, e.g. "epic-core-play-loop" */
+  ticketSlug?: string;
+  /** 6.13+ only: why this epic waits on each dependency, keyed by epic number */
+  dependsOnNeeds?: Record<string, string>;
+  /** 6.13+ only: the epic's own `after` gate, as epic slugs */
+  gatedBy?: string[];
+  /** 6.13+ only: project-relative path of the epic's ticket file */
+  sourceFile?: string;
 }
 
 export interface SignalBreakdown {
@@ -70,7 +172,7 @@ export interface CommitMapping {
 
 // ─── BMAD install config ────────────────────────────────────────────
 
-export type BmadVersion = "v6" | "v5" | "v4" | "unknown";
+export type BmadVersion = "tickets" | "v6" | "v5" | "v4" | "unknown";
 
 export interface BmadConfig {
   version: BmadVersion;
@@ -84,6 +186,12 @@ export interface BmadConfig {
   knowledgeDir: string;
   /** Absolute path to the BMAD output root */
   outputDir: string;
+  /** 6.13+ only: absolute path to the active initiative's ticket tree */
+  initiativeDir?: string;
+  /** 6.13+ only: absolute path to `{output_folder}/backlog`, when it exists */
+  backlogDir?: string;
+  /** 6.13+ only: the active initiative's folder name */
+  activeInitiative?: string;
   projectName: string;
   userName?: string;
 }
@@ -182,6 +290,10 @@ export interface BmadProject {
   risks?: Risk[];
   /** FR Coverage Map rows parsed from epics.md */
   frMap?: FrMapRow[];
+  /** 6.13+ ticket-tree summary; absent for the v4/v5/v6 layouts */
+  tickets?: TicketSummary;
+  /** Human-readable name of the layout that was parsed, for the startup log and header */
+  layout?: string;
 }
 
 export interface FrMapRow {

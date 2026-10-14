@@ -9,7 +9,9 @@ import type {
   Epic, UserStory, AcceptanceCriteria, Task, BmadProject, FrMapRow,
   BmadConfig, SprintStatus, BmadDocument,
 } from "../types/index.js";
-import { resolveBmadConfig } from "./config.js";
+import { resolveBmadConfig, type RequestedLayout } from "./config.js";
+import { parseTicketTree, writeTicketStatus, COLUMN_TO_STATUS } from "./ticket-project.js";
+import { loadTicketTree } from "./tickets.js";
 import { loadSprintStatus, writeSprintStatusEntry } from "./sprint-status.js";
 import { parseDocuments } from "./documents.js";
 import { computeNextStep, computeRisks } from "./next-steps.js";
@@ -483,7 +485,20 @@ function parseOldEpicFile(content: string, filePath: string): Epic | null {
 
 // ─── Structure detection & main entry ───────────────────────────────
 
-export interface ParseOptions { dir: string; mode?: "auto" | "bmad-new" | "bmad-old" | "flat"; }
+export interface ParseOptions {
+  dir: string;
+  mode?: "auto" | "bmad-new" | "bmad-old" | "flat" | "tickets";
+  /** Which BMAD layout to parse; "auto" (the default) detects it. */
+  bmadVersion?: RequestedLayout;
+}
+
+/** Human-readable name for the layout the dashboard ended up parsing. */
+export function layoutLabel(mode: string, version: string): string {
+  if (mode === "tickets") return "tickets (BMAD 6.13+ ticket tree)";
+  if (mode === "bmad-new") return `${version === "unknown" ? "v6" : version} (epics.md + sprint-status.yaml)`;
+  if (mode === "bmad-old") return `${version === "unknown" ? "v4/v5" : version} (docs/stories)`;
+  return "flat (globbed markdown)";
+}
 
 function detectStructure(dir: string): "bmad-new" | "bmad-old" | "flat" {
   if (fs.existsSync(path.join(dir, "_bmad-output", "planning-artifacts"))) return "bmad-new";
@@ -492,7 +507,8 @@ function detectStructure(dir: string): "bmad-new" | "bmad-old" | "flat" {
 }
 
 /** Choose a parse layout from the resolved config, falling back to legacy detection. */
-function layoutForConfig(config: BmadConfig, dir: string): "bmad-new" | "bmad-old" | "flat" {
+function layoutForConfig(config: BmadConfig, dir: string): "bmad-new" | "bmad-old" | "flat" | "tickets" {
+  if (config.version === "tickets") return "tickets";
   if (config.version === "v6" || config.version === "unknown") {
     if (fs.existsSync(config.planningDir) || fs.existsSync(config.implementationDir)) return "bmad-new";
   }
@@ -504,8 +520,14 @@ function layoutForConfig(config: BmadConfig, dir: string): "bmad-new" | "bmad-ol
 
 export function parseBmadProject(opts: ParseOptions): BmadProject {
   const { dir } = opts;
-  const config = resolveBmadConfig(dir);
+  const config = resolveBmadConfig(dir, opts.bmadVersion ?? "auto");
   const mode = opts.mode === "auto" || !opts.mode ? layoutForConfig(config, dir) : opts.mode;
+
+  // ─── BMAD 6.13+ ticket tree ──────────────────────────────────────
+  // A different shape entirely (tickets.toml + plan files, no epics.md and
+  // no sprint-status.yaml), so it gets its own parser and returns early.
+  if (mode === "tickets") return parseTicketProject(config, dir);
+
   const raw: Record<string, string> = {};
   const epics: Epic[] = [];
   const standaloneStories: UserStory[] = [];
@@ -637,6 +659,47 @@ export function parseBmadProject(opts: ParseOptions): BmadProject {
     nextStep: computeNextStep(sprintStatus),
     risks: computeRisks(sprintStatus, epics),
     frMap: frMap.length ? frMap : undefined,
+    layout: layoutLabel(mode, config.version),
+  };
+}
+
+// ─── BMAD 6.13+ ticket tree ─────────────────────────────────────────
+
+function parseTicketProject(config: BmadConfig, dir: string): BmadProject {
+  const result = parseTicketTree(config);
+  let documents: BmadDocument[];
+  try {
+    documents = parseDocuments(config);
+  } catch {
+    documents = [];
+  }
+
+  const name = config.projectName || path.basename(path.resolve(dir));
+  const layout = layoutLabel("tickets", config.version);
+
+  if (!result) {
+    const where = config.initiativeDir ?? config.outputDir;
+    return {
+      name, epics: [], raw: {}, config, documents, layout,
+      nextStep: null,
+      risks: [{
+        level: "warning",
+        message: `No ticket tree found at ${where}. Expected an initiative folder holding a tickets.toml — ` +
+          `set core.active_initiative in _bmad/custom/config.user.toml if it lives elsewhere.`,
+      }],
+    };
+  }
+
+  return {
+    name,
+    epics: result.epics,
+    raw: {},
+    config,
+    documents,
+    tickets: result.summary,
+    nextStep: result.nextStep,
+    risks: result.risks,
+    layout,
   };
 }
 
@@ -725,6 +788,17 @@ export function updateStoryStatus(
   if (!epic) return { ok: false, error: "Epic not found" };
   const story = epic.stories.find((s) => s.id === storyId);
   if (!story) return { ok: false, error: "Story not found" };
+
+  // ─── 6.13+ ticket tree: status lives in the plan, nowhere else ───
+  if (project.config?.version === "tickets" && story.ticket) {
+    const res = updateTicketStatus(project.config, story.ticket.ref, newStatus);
+    if (!res.ok) return res;
+    story.status = newStatus;
+    story.rawStatus = COLUMN_TO_STATUS[newStatus] ?? newStatus;
+    if (story.ticket) story.ticket.status = COLUMN_TO_STATUS[newStatus] ?? newStatus;
+    return { ok: true };
+  }
+
   const mdStatus = statusToMarkdown(newStatus);
 
   // ─── Write the story file (if one exists) ───
@@ -777,6 +851,9 @@ export function updateEpicStatus(
 ): { ok: boolean; error?: string } {
   const epic = project.epics.find((e) => e.id === epicId);
   if (!epic) return { ok: false, error: "Epic not found" };
+  if (project.config?.version === "tickets") {
+    return { ok: false, error: "Epic status is derived from its tickets in this layout and cannot be set directly" };
+  }
   if (!project.config || !project.sprintStatus) return { ok: false, error: "No sprint-status.yaml" };
   const num = parseInt(epic.id.replace(/\D/g, ""), 10);
   const key = `epic-${num}`;
@@ -785,6 +862,35 @@ export function updateEpicStatus(
   project.sprintStatus.epics[key] = newStatus;
   epic.status = newStatus;
   return { ok: true };
+}
+
+/**
+ * 6.13+ write-back: set a ticket's status in its plan's frontmatter,
+ * creating a frontmatter-only plan when there is none. `tickets.toml` and
+ * leaf files are never written — exactly what `tickets.py mark` does.
+ *
+ * The tree is re-read so a plan another tool changed since the last parse
+ * is not overwritten from stale state.
+ */
+export function updateTicketStatus(
+  config: BmadConfig, ref: string, column: BoardStatus
+): { ok: boolean; error?: string } {
+  if (!config.initiativeDir) return { ok: false, error: "No ticket tree to write to" };
+  const status = COLUMN_TO_STATUS[column];
+  if (!status) return { ok: false, error: `No ticket status maps to the "${column}" column` };
+
+  for (const root of [config.initiativeDir, config.backlogDir]) {
+    if (!root || !fs.existsSync(root)) continue;
+    try {
+      const tree = loadTicketTree(root);
+      if (!tree.tickets.some((t) => t.ref === ref)) continue;
+      const res = writeTicketStatus(tree, ref, status);
+      return res.ok ? { ok: true } : { ok: false, error: res.error };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? "could not read the ticket tree" };
+    }
+  }
+  return { ok: false, error: `No ticket matches ${ref}` };
 }
 
 // ─── Write-back: toggle AC ──────────────────────────────────────────

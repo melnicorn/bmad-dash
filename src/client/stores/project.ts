@@ -18,6 +18,11 @@ export const useProjectStore = defineStore('project', {
     nextStep: (state) => state.project?.nextStep ?? null,
     risks: (state) => state.project?.risks ?? [],
     projectConfig: (state) => state.project?.config ?? null,
+    /** 6.13+ ticket-tree summary; null for the v4/v5/v6 layouts. */
+    ticketSummary: (state) => state.project?.tickets ?? null,
+    /** True when the project was parsed as a 6.13+ ticket tree. */
+    isTicketLayout: (state) => state.project?.config?.version === 'tickets',
+    layout: (state) => state.project?.layout ?? null,
     docById: (state) => (id: string) =>
       state.project?.documents?.find((d) => d.id === id) ?? null,
     /** Unmatched commits (storyId === null) — work happening outside any tracked story. */

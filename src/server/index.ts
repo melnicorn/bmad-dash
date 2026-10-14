@@ -5,8 +5,16 @@ import { existsSync, readFileSync } from 'fs'
 import { parseBmadProject, updateStoryStatus, updateEpicStatus, toggleAcceptanceCriteria, toggleTask, BOARD_COLUMNS } from "../parser/index.js";
 import type { BmadProject } from "../types/index.js";
 import type { BoardStatus } from "../parser/index.js";
+import type { RequestedLayout } from "../parser/config.js";
 
-export function createServer(project: BmadProject, port: number, devSrcDir?: string, projectDir?: string) {
+export interface ServerOptions {
+  /** The layout the CLI resolved, so re-parses after a file change keep it. */
+  bmadVersion?: RequestedLayout;
+}
+
+export function createServer(
+  project: BmadProject, port: number, devSrcDir?: string, projectDir?: string, opts: ServerOptions = {},
+) {
   const app = express();
   app.use(express.json());
 
@@ -128,6 +136,8 @@ export function createServer(project: BmadProject, port: number, devSrcDir?: str
       frMap: p.frMap ?? [],
       nextStep: p.nextStep ?? null,
       risks: p.risks ?? [],
+      tickets: p.tickets ?? null,
+      layout: p.layout ?? null,
     }
   }
 
@@ -158,11 +168,12 @@ export function createServer(project: BmadProject, port: number, devSrcDir?: str
       })
 
       const handleChange = (changedPath: string) => {
-        if (!changedPath.endsWith('.md')) return
+        // The 6.13+ tree's build order lives in tickets.toml, so watch that too.
+        if (!changedPath.endsWith('.md') && !changedPath.endsWith('tickets.toml')) return
         if (debounceTimer) clearTimeout(debounceTimer)
         debounceTimer = setTimeout(() => {
           try {
-            const updated = parseBmadProject({ dir: projectDir })
+            const updated = parseBmadProject({ dir: projectDir, bmadVersion: opts.bmadVersion })
             updated.commitMappings = project.commitMappings
             Object.assign(project, updated)
             broadcast(buildPayload(project))

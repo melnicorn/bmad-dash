@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { simpleGit, type SimpleGit } from "simple-git";
 import type { BmadProject, CommitMapping, UserStory } from "../types/index.js";
-import { extractCommitSignals, extractPathsFromStoryText } from "./extractor.js";
+import { extractCommitSignals, extractPathsFromStoryText, extractStoryIdReferences } from "./extractor.js";
 
 export const CURRENT_PIPELINE_VERSION = "3.0.0";
 
@@ -216,6 +216,34 @@ const RERANK_TOP_K = 3;           // send top K to the NLI classifier
 const RERANK_AMBIGUITY = 0.12;    // trigger re-rank if gap between #1 and #2 is below this
 const RERANK_CEILING = 0.55;      // always re-rank if top score is below this
 
+// ─── Stage 0: exact id references ───────────────────────────────────
+
+interface RawCommit { sha: string; message: string; body: string; date: string; files: string[] }
+
+/**
+ * Map every commit whose message names exactly one known story/ticket id.
+ * Writes the mappings into `gitmap` and returns how many it matched. A
+ * commit naming several ids is left to the scoring stages.
+ */
+function matchByExactId(commits: RawCommit[], knownIds: Set<string>, gitmap: GitMapFile): number {
+  let matched = 0;
+  for (const c of commits) {
+    const refs = extractStoryIdReferences(`${c.message} ${c.body}`, knownIds);
+    if (refs.length !== 1) continue;
+    gitmap.mappings[c.sha] = {
+      sha: c.sha, message: c.message, body: c.body, files: c.files, date: c.date,
+      storyId: refs[0],
+      score: 1,
+      signalBreakdown: {
+        storyIdMatch: 1, typeGate: 0, pathOverlap: 0, keyword: 0, embedding: 0, nli: 0, diffSignal: 0,
+      },
+      pipeline_version: CURRENT_PIPELINE_VERSION,
+    };
+    matched++;
+  }
+  return matched;
+}
+
 // ─── Main: match commits to stories ─────────────────────────────────
 
 export async function matchCommitsToStories(
@@ -229,7 +257,7 @@ export async function matchCommitsToStories(
 
   // ── Git log ──
   const git = simpleGit(projectDir);
-  let commits: { sha: string; message: string; body: string; date: string; files: string[] }[];
+  let commits: RawCommit[];
   try {
     const log = await git.log(["--name-only"]);
     commits = log.all.map((entry: any) => ({
@@ -245,17 +273,39 @@ export async function matchCommitsToStories(
 
   // ── Load gitmap, find new commits ──
   const gitmap = loadGitMap(projectDir);
-  const newCommits = commits.filter((c) => !gitmap.mappings[c.sha]);
+  let newCommits = commits.filter((c) => !gitmap.mappings[c.sha]);
   if (newCommits.length === 0) {
     console.log("  All commits already mapped");
     return Object.values(gitmap.mappings);
   }
-  if (opts?.skipEmbedding) return Object.values(gitmap.mappings);
 
-  // Check if @huggingface/transformers is installed (it's an optional dep)
+  // ═══════════════════════════════════════════════════════════════════
+  // STAGE 0: Exact id references — no model needed
+  // ═══════════════════════════════════════════════════════════════════
+  // A commit that names exactly one known story or ticket id ("(ticket 3.4)",
+  // "story 1.2", "#5") is matched outright. This is the whole matching path
+  // when @huggingface/transformers is not installed, and it saves the ML
+  // stages the commits they would have scored 1.0 anyway.
+  const storyIdSetAll = new Set(allStories.map((s) => s.id));
+  const exact = matchByExactId(newCommits, storyIdSetAll, gitmap);
+  if (exact > 0) {
+    newCommits = newCommits.filter((c) => !gitmap.mappings[c.sha]);
+    console.log(`  ${exact} commit(s) matched by id reference`);
+  }
+  if (newCommits.length === 0) {
+    saveGitMap(projectDir, gitmap);
+    return Object.values(gitmap.mappings);
+  }
+  if (opts?.skipEmbedding) {
+    if (exact > 0) saveGitMap(projectDir, gitmap);
+    return Object.values(gitmap.mappings);
+  }
+
+  // Check if @huggingface/transformers is installed (it's an opt-in peer dep)
   if (!(await checkTransformers())) {
     console.log("  @huggingface/transformers not installed — run: npm install @huggingface/transformers");
-    console.log("     Skipping AI commit matching. Dashboard will work without it.");
+    console.log("     Matching by id reference only; the dashboard works without it.");
+    if (exact > 0) saveGitMap(projectDir, gitmap);
     return Object.values(gitmap.mappings);
   }
 
