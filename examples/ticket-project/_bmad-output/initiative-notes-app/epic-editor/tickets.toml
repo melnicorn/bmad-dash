@@ -1,0 +1,46 @@
+# epic-editor — agreed children in build order. Table order is the build order; id is not.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Type a note"
+description = "A single plain-text editor that opens on launch, with the caret already in it."
+verify = "Launching the app shows an editor you can type into immediately."
+covers = ["CAP-1"]
+after = []
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Save without being asked"
+description = "Writes the note to disk on every pause in typing, atomically, so a kill mid-write cannot truncate it."
+verify = "The kill-mid-write test passes and a force-quit mid-sentence loses nothing."
+covers = ["CAP-1"]
+after = [1]
+hitl = false
+risk = "high"
+references = ["_bmad-output/initiative-notes-app/architecture-notes-app/architecture-notes-app.md"]
+
+[[entry]]
+id = 4
+type = "spike"
+title = "Pick a storage format"
+description = "Compare plain files, SQLite and a log, on crash safety and sync-friendliness."
+verify = "A decision with measurements is written into the architecture note."
+after = [1]
+hitl = true
+risk = "medium"
+notes = ["The answer shapes epic-sync's conflict handling."]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Reopen where you left off"
+description = "Restores the last note and the caret position on launch."
+verify = "Quitting and relaunching lands on the same note with the caret in the same place."
+covers = ["CAP-1"]
+after = [2]
+hitl = false
+risk = "low"

@@ -30,6 +30,11 @@
   --review-bg: #a78bfa15;
   --todo: #64748b;
   --todo-bg: #64748b12;
+  /* 6.13+ ticket badges: blocked tickets and proposed risk */
+  --blocked: #f87171;
+  --blocked-bg: #f8717118;
+  --hitl: #38bdf8;
+  --hitl-bg: #38bdf818;
 }
 
 /* ─── Light palette ─── */
@@ -54,6 +59,10 @@
   --review-bg: #7c4ddb16;
   --todo: #6b7280;
   --todo-bg: #6b728015;
+  --blocked: #d9403f;
+  --blocked-bg: #d9403f14;
+  --hitl: #0a7fa8;
+  --hitl-bg: #0a7fa814;
   color-scheme: light;
 }
 

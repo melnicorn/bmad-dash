@@ -5,6 +5,7 @@ import { useProjectStore } from '../stores/project'
 import { ArrowLeft, TriangleAlert } from '@lucide/vue'
 import type { CommitMapping } from '../../types/index'
 import MarkdownPane from '../components/MarkdownPane.vue'
+import TicketBadges from '../components/TicketBadges.vue'
 
 // ─── Route + Store ───
 const route = useRoute()
@@ -29,6 +30,63 @@ const epic = computed(() =>
 const story = computed(() =>
   epic.value?.stories.find(s => s.id === storyId.value) ?? null
 )
+
+// ─── 6.13+ ticket tree ───
+// A ticket's acceptance lives in its plan, not in a checklist the dashboard
+// owns, so the Requirements tab shows the entry's text and the Plan tab
+// renders the plan file itself.
+const ticket = computed(() => story.value?.ticket ?? null)
+const isTicket = computed(() => !!ticket.value)
+const vizTabLabel = computed(() => (isTicket.value ? 'Plan' : 'Visualizer'))
+
+/**
+ * Prerequisite chips, with the title and state of whatever each names. An
+ * epic-level gate ("waits for epic-shell to be done") is unmet work the ticket
+ * is waiting on but is not in its own `after`, so it is appended here —
+ * otherwise the "still unmet" count names more than the list shows.
+ */
+const prerequisites = computed(() => {
+  const after = ticket.value?.after ?? []
+  const seen = new Set(after.map(a => a.ref))
+  const gates = (ticket.value?.waitingOn ?? []).filter(w => !seen.has(w.ref))
+  return [...after, ...gates]
+})
+const blocks = computed(() => ticket.value?.blocks ?? [])
+const waitingSet = computed(() => new Set((ticket.value?.waitingOn ?? []).map(w => w.ref)))
+
+const planMetaRows = computed(() =>
+  Object.entries(ticket.value?.planMeta ?? {}).map(([key, value]) => ({
+    label: key.replace(/_/g, ' '),
+    value,
+  }))
+)
+
+const STATE_COLOR: Record<string, string> = {
+  planned: '--todo',
+  backlog: '--todo',
+  'in-progress': '--active',
+  review: '--review',
+  done: '--done',
+  dropped: '--text-3',
+}
+
+function stateColorVar(state?: string): string {
+  return STATE_COLOR[state ?? ''] ?? '--todo'
+}
+
+/** Jump to a prerequisite or blocked ticket by its ref. */
+function goToRef(ref: string) {
+  for (const e of store.epics) {
+    const hit = e.stories.find(s => s.id === ref)
+    if (hit) {
+      router.push({ name: 'storyDetail', params: { epicId: e.id, storyId: ref } })
+      return
+    }
+  }
+  // A whole-epic gate: open that epic instead.
+  const bySlug = store.epics.find(e => e.ticketSlug === ref)
+  if (bySlug) router.push({ name: 'epic', params: { epicId: bySlug.id } })
+}
 
 // ─── Per-item pending state (prevents double-click race) ───
 const pendingAC = ref<Set<number>>(new Set())
@@ -110,6 +168,15 @@ const markdownSource = ref('')
 const markdownLoading = ref(false)
 const markdownError = ref('')
 
+/**
+ * A ticket plan is rendered whole — its "Tasks & Acceptance" section is the
+ * plan's own content, not a checklist this view owns. Only the frontmatter
+ * block is dropped, since its fields are already shown under Build plan.
+ */
+function stripFrontmatter(md: string): string {
+  return md.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, '')
+}
+
 function filterMarkdown(md: string): string {
   const lines = md.split('\n')
   const result: string[] = []
@@ -181,7 +248,13 @@ watch(storyId, () => {
       </button>
 
       <!-- Identifier badges -->
-      <div class="story-meta">
+      <div v-if="ticket" class="story-meta">
+        <TicketBadges :ticket="ticket" size="full" />
+        <span class="meta-badge raw-status" :title="`Derived state: ${ticket.state}`">
+          {{ ticket.status || ticket.state }}
+        </span>
+      </div>
+      <div v-else class="story-meta">
         <span class="meta-badge">Epic {{ epicId }}</span>
         <span class="meta-sep">·</span>
         <span class="meta-badge">Story {{ storyId }}</span>
@@ -224,7 +297,7 @@ watch(storyId, () => {
           class="story-tab"
           :class="{ 'is-active': activeTab === 'visualizer' }"
           @click="onTabChange('visualizer')"
-        >Visualizer</button>
+        >{{ vizTabLabel }}</button>
       </div>
 
     </div>
@@ -238,6 +311,109 @@ watch(storyId, () => {
 
           <!-- Description -->
           <p v-if="story.description" class="story-description">{{ story.description }}</p>
+
+          <!-- ─── 6.13+ ticket panel ─── -->
+          <template v-if="ticket">
+
+            <!-- Blocked, with the reason the build recorded -->
+            <div v-if="ticket.blockedReason" class="ticket-callout is-blocked">
+              <strong>Blocked{{ ticket.blockedAt ? ` since ${ticket.blockedAt}` : '' }}:</strong>
+              {{ ticket.blockedReason }}
+            </div>
+
+            <!-- An open question to settle before the ticket starts -->
+            <div v-if="ticket.unknown" class="ticket-callout is-open">
+              <strong>Open question:</strong> {{ ticket.unknown }}
+            </div>
+
+            <!-- How the ticket is verified -->
+            <section v-if="ticket.verify" class="detail-section">
+              <h3 class="section-title">Verify</h3>
+              <p class="ticket-text">{{ ticket.verify }}</p>
+            </section>
+
+            <!-- Requirements / capabilities this ticket covers -->
+            <section v-if="ticket.covers.length" class="detail-section">
+              <h3 class="section-title">Covers</h3>
+              <div class="chip-row">
+                <span v-for="c in ticket.covers" :key="c" class="chip">{{ c }}</span>
+              </div>
+            </section>
+
+            <!-- Prerequisites, in the order the tree declares them -->
+            <section v-if="prerequisites.length" class="detail-section">
+              <h3 class="section-title">
+                Waits on
+                <span v-if="waitingSet.size" class="section-note">{{ waitingSet.size }} still unmet</span>
+              </h3>
+              <ul class="ref-list">
+                <li v-for="p in prerequisites" :key="p.ref">
+                  <button
+                    class="ref-chip"
+                    :class="{ 'is-unmet': waitingSet.has(p.ref) }"
+                    @click="goToRef(p.ref)"
+                  >
+                    <span class="ref-dot" :style="{ background: `var(${stateColorVar(p.state)})` }" />
+                    <span class="ref-id">{{ p.ref }}</span>
+                    <span v-if="p.title" class="ref-title">{{ p.title }}</span>
+                    <span v-if="p.isEpic" class="ref-kind">whole epic</span>
+                  </button>
+                </li>
+              </ul>
+            </section>
+
+            <!-- What this ticket is holding up -->
+            <section v-if="blocks.length" class="detail-section">
+              <h3 class="section-title">Blocks</h3>
+              <ul class="ref-list">
+                <li v-for="b in blocks" :key="b.ref">
+                  <button class="ref-chip" @click="goToRef(b.ref)">
+                    <span class="ref-dot" :style="{ background: `var(${stateColorVar(b.state)})` }" />
+                    <span class="ref-id">{{ b.ref }}</span>
+                    <span v-if="b.title" class="ref-title">{{ b.title }}</span>
+                  </button>
+                </li>
+              </ul>
+            </section>
+
+            <!-- Notes the entry or its leaf file carries -->
+            <section v-if="ticket.notes.length" class="detail-section">
+              <h3 class="section-title">Notes</h3>
+              <ul class="note-list">
+                <li v-for="(n, i) in ticket.notes" :key="i">{{ n }}</li>
+              </ul>
+            </section>
+
+            <!-- Reference links the entry carries -->
+            <section v-if="ticket.references.length" class="detail-section">
+              <h3 class="section-title">References</h3>
+              <ul class="note-list">
+                <li v-for="(r, i) in ticket.references" :key="i" class="ref-path">{{ r }}</li>
+              </ul>
+            </section>
+
+            <!-- The build plan: where it is and what it recorded -->
+            <section class="detail-section">
+              <h3 class="section-title">Build plan</h3>
+              <p v-if="!ticket.planPath" class="ticket-text is-muted">
+                No plan yet — this ticket is still only an entry in
+                <code>{{ ticket.epicSlug }}/tickets.toml</code>.
+              </p>
+              <template v-else>
+                <p class="ticket-text">
+                  <code>{{ ticket.planPath }}</code>
+                  — open the <strong>{{ vizTabLabel }}</strong> tab to read it.
+                </p>
+                <dl v-if="planMetaRows.length" class="meta-grid">
+                  <template v-for="row in planMetaRows" :key="row.label">
+                    <dt>{{ row.label }}</dt>
+                    <dd>{{ row.value }}</dd>
+                  </template>
+                </dl>
+              </template>
+            </section>
+
+          </template>
 
           <!-- Acceptance Criteria -->
           <section v-if="story.acceptanceCriteria.length > 0" class="detail-section">
@@ -295,7 +471,7 @@ watch(storyId, () => {
         <div v-else-if="activeTab === 'visualizer'" class="visualizer-panel">
           <p v-if="markdownLoading" class="viz-loading">Loading...</p>
           <p v-else-if="markdownError" class="viz-error">{{ markdownError }}</p>
-          <MarkdownPane v-else :source="markdownSource" :filter="filterMarkdown" />
+          <MarkdownPane v-else :source="markdownSource" :filter="isTicket ? stripFrontmatter : filterMarkdown" />
         </div>
 
       </div>
@@ -658,6 +834,163 @@ watch(storyId, () => {
 .story-tab.is-active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+}
+
+/* ─── 6.13+ ticket panel ─── */
+
+.ticket-callout {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  color: var(--text-1);
+}
+
+.ticket-callout.is-blocked {
+  border-color: var(--blocked);
+  background: var(--blocked-bg);
+}
+
+.ticket-callout.is-open {
+  border-color: var(--active);
+  background: var(--active-bg);
+}
+
+.ticket-text {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.ticket-text.is-muted { color: var(--text-2); }
+
+.ticket-text code,
+.meta-grid dd code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--bg-2);
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm);
+}
+
+.section-note {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--blocked);
+  margin-left: 0.4rem;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.chip {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.16rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  background: var(--bg-2);
+}
+
+.ref-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.ref-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  text-align: left;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.ref-chip:hover { border-color: var(--border-hover); }
+.ref-chip.is-unmet { border-color: var(--blocked); background: var(--blocked-bg); }
+
+.ref-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ref-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ref-title {
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-kind {
+  font-size: 0.65rem;
+  color: var(--text-2);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.note-list {
+  list-style: disc;
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+
+.note-list .ref-path {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+}
+
+.meta-grid dt {
+  color: var(--text-2);
+  text-transform: capitalize;
+}
+
+.meta-grid dd {
+  margin: 0;
+  color: var(--text-1);
+  word-break: break-word;
 }
 
 /* ─── Visualizer panel ─── */

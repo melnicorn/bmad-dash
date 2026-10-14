@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { UserStory } from '../../types/index'
+import TicketBadges from './TicketBadges.vue'
 
 // ─── Props ───
 const props = defineProps<{ story: UserStory; epicId: string }>()
+
+// ─── 6.13+ tickets ───
+// A ticket card shows its ref and badges, and names the prerequisites it is
+// still waiting on — including cross-epic ones, which read as "<epic>.<entry>".
+const ticket = computed(() => props.story.ticket ?? null)
+const waitingOn = computed(() => ticket.value?.waitingOn ?? [])
+const isDropped = computed(() => ticket.value?.state === 'dropped')
+const waitingTitle = computed(() =>
+  waitingOn.value.map(w => (w.title ? `${w.ref} — ${w.title}` : w.ref)).join('\n')
+)
 
 // ─── Drag State ───
 const isDragging = ref(false)
@@ -42,26 +53,36 @@ function statusColorVar(status: string | undefined): string {
 <template>
   <div
     class="kanban-card"
-    :class="{ 'is-dragging': isDragging }"
+    :class="{ 'is-dragging': isDragging, 'is-ticket': !!ticket, 'is-dropped': isDropped }"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @click="onClick"
     :title="story.title"
   >
-    <span
-      class="status-dot"
-      :style="{ background: `var(${statusColorVar(story.status)})` }"
-    />
-    <span class="card-title">{{ story.title }}</span>
+    <div class="card-row">
+      <span
+        class="status-dot"
+        :style="{ background: `var(${statusColorVar(story.status)})` }"
+      />
+      <span class="card-title">{{ story.title }}</span>
+    </div>
+
+    <TicketBadges v-if="ticket" :ticket="ticket" size="card" />
+
+    <div v-if="waitingOn.length" class="card-waiting" :title="waitingTitle">
+      waiting on
+      <span v-for="w in waitingOn" :key="w.ref" class="waiting-ref">{{ w.ref }}</span>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .kanban-card {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -79,6 +100,36 @@ function statusColorVar(status: string | undefined): string {
 .kanban-card.is-dragging {
   opacity: 0.5;
   cursor: grabbing;
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+/* A dropped ticket stays visible but reads as struck through. */
+.kanban-card.is-dropped { opacity: 0.55; }
+.kanban-card.is-dropped .card-title { text-decoration: line-through; }
+
+.card-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  color: var(--text-2);
+}
+
+.waiting-ref {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.1rem 0.26rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  color: var(--text-1);
 }
 
 .status-dot {

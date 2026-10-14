@@ -41,6 +41,8 @@ async function onDrop(event: DragEvent, status: string) {
   if (!epicId) return
   const epic = store.epics.find(e => e.id === epicId)
   if (!epic || epic.status === status) return
+  // In a 6.13+ tree an epic's status follows its tickets; there is nothing to write.
+  if (store.isTicketLayout) return
   await store.updateEpicStatus(epicId, status)
 }
 </script>
@@ -50,7 +52,11 @@ async function onDrop(event: DragEvent, status: string) {
     <header class="board-header">
       <h1 class="board-title">Epic Board</h1>
       <p class="board-sub">
-        <template v-if="hasSprintStatus">
+        <template v-if="store.isTicketLayout">
+          Epic status is derived from each epic's tickets, so it is not dragged here.
+          Move a ticket on its epic's board instead.
+        </template>
+        <template v-else-if="hasSprintStatus">
           Epic status from <code>sprint-status.yaml</code> — drag to update.
         </template>
         <template v-else>

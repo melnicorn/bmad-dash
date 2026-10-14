@@ -16,6 +16,19 @@ function isStoryFilename(name: string): boolean {
   return /^\d+[-.]\d+[-.]/.test(name);
 }
 
+/**
+ * Files the 6.13+ ticket tree owns: container tickets (`initiative-*.md`,
+ * `epic-*.md`), leaf tickets (`story|spike|bug-*.md`) and build plans
+ * (`*-plan.md`). These are the board's data, not documents to browse.
+ */
+function isTicketFile(name: string): boolean {
+  return (
+    /^(story|spike|bug)-.+\.md$/.test(name) ||
+    /^(epic|initiative)-.+\.md$/.test(name) ||
+    /-plan\.md$/.test(name)
+  );
+}
+
 /** Dotfiles BMAD writes as scratch logs — hidden from the browser by default. */
 function isHiddenDoc(name: string): boolean {
   return name.startsWith(".");
@@ -54,15 +67,23 @@ function classify(relPath: string, name: string): DocType {
   if (p.includes("/prds/") || base === "prd.md" || base.startsWith("prd-")) return "prd";
   if (p.includes("/architecture") || base === "architecture.md" || base.startsWith("architecture-")) return "architecture";
   if (p.includes("/briefs/") || base.startsWith("brief")) return "brief";
-  if (p.includes("/ux-designs/") || base === "design.md" || base === "experience.md") return "ux-design";
-  if (p.includes("/research") || base.includes("-research")) return "research";
+  if (p.includes("/ux-designs/") || p.includes("/ux-") || base.startsWith("ux-")
+      || base === "design.md" || base === "experience.md") return "ux-design";
+  if (p.includes("/research") || base.includes("-research") || base.startsWith("research-")) return "research";
+  if (p.includes("/brainstorm") || base.startsWith("brainstorm")) return "brief";
 
   return "other";
 }
 
-/** The bundle folder a doc belongs to, e.g. prds/<initiative>/prd.md → "<initiative>". */
-function detectInitiative(relFromRoot: string): string | undefined {
+/**
+ * The bundle folder a doc belongs to, e.g. prds/<initiative>/prd.md →
+ * "<initiative>". With `flat`, the first segment is the bundle instead —
+ * the 6.13+ tree nests documents one level under the initiative
+ * (`spec-numception/functional-requirements.md` → "spec-numception").
+ */
+function detectInitiative(relFromRoot: string, flat = false): string | undefined {
   const parts = relFromRoot.split(path.sep);
+  if (flat) return parts.length >= 2 ? parts[0] : undefined;
   // parts like ["prds", "prd-one-stop-shop-2026-07-02", "prd.md"]
   if (parts.length >= 3) return parts[1];
   return undefined;
@@ -77,6 +98,10 @@ interface ScanRoot {
   dir: string;
   /** exclude story files (true for the implementation dir) */
   excludeStories: boolean;
+  /** exclude the ticket tree's own .md files (true for a 6.13+ initiative root) */
+  excludeTickets?: boolean;
+  /** group docs by their first path segment rather than their second */
+  flatInitiative?: boolean;
 }
 
 /**
@@ -86,22 +111,33 @@ interface ScanRoot {
 export function parseDocuments(config: BmadConfig): BmadDocument[] {
   const { projectDir, planningDir, implementationDir, knowledgeDir } = config;
 
-  const roots: ScanRoot[] = [
-    { dir: planningDir, excludeStories: false },
-    { dir: implementationDir, excludeStories: true },
-    { dir: knowledgeDir, excludeStories: false },
-  ];
+  // In the 6.13+ ticket tree the initiative folder is both the planning and
+  // the implementation root: planning documents sit in `spec-*`, `prd-*`,
+  // `architecture-*`, `ux-*` and `research-*` folders beside the epics, so
+  // docs are grouped by that folder and the ticket files are skipped.
+  const tickets = config.version === "tickets";
+  const roots: ScanRoot[] = tickets
+    ? [
+        { dir: planningDir, excludeStories: true, excludeTickets: true, flatInitiative: true },
+        { dir: knowledgeDir, excludeStories: false },
+      ]
+    : [
+        { dir: planningDir, excludeStories: false },
+        { dir: implementationDir, excludeStories: true },
+        { dir: knowledgeDir, excludeStories: false },
+      ];
 
   const seen = new Set<string>();
-  const raw: { file: string; rel: string }[] = [];
+  const raw: { file: string; rel: string; root: ScanRoot }[] = [];
   for (const root of roots) {
     for (const file of walkMarkdown(root.dir)) {
       if (seen.has(file)) continue;
       const name = path.basename(file);
       if (isHiddenDoc(name)) continue;
       if (root.excludeStories && isStoryFilename(name)) continue;
+      if (root.excludeTickets && isTicketFile(name)) continue;
       seen.add(file);
-      raw.push({ file, rel: path.relative(projectDir, file) });
+      raw.push({ file, rel: path.relative(projectDir, file), root });
     }
   }
 
@@ -110,7 +146,7 @@ export function parseDocuments(config: BmadConfig): BmadDocument[] {
   const byRelPath = new Map<string, BmadDocument>();
   const docs: BmadDocument[] = [];
 
-  for (const { file, rel } of raw) {
+  for (const { file, rel, root } of raw) {
     let content = "";
     let sizeBytes = 0;
     try {
@@ -123,7 +159,7 @@ export function parseDocuments(config: BmadConfig): BmadDocument[] {
     const name = path.basename(file);
     const relForRoot = relForContainingRoot(file, roots);
     const type = classify(rel, name);
-    const initiative = relForRoot ? detectInitiative(relForRoot) : undefined;
+    const initiative = relForRoot ? detectInitiative(relForRoot, root.flatInitiative) : undefined;
     const fmTitle = typeof data.title === "string" ? data.title : undefined;
     const title = fmTitle || firstH1(body) || name.replace(/\.md$/, "");
 

@@ -25,6 +25,15 @@ const deps = computed(() =>
     .filter((e): e is Epic => !!e)
 )
 
+/**
+ * Why this epic waits on a dependency. The 6.13+ initiative `tickets.toml`
+ * records a `needs` note on each `after` edge; the v6 layouts have none.
+ */
+function needsFor(depEpicId: string): string {
+  const num = parseInt(depEpicId.replace(/\D/g, ''), 10)
+  return epic.value?.dependsOnNeeds?.[String(num)] ?? ''
+}
+
 const statusColor = computed(() =>
   EPIC_COLUMNS.find(c => c.key === epic.value?.status)?.colorVar ?? '--todo'
 )
@@ -62,8 +71,15 @@ function openEpicsDoc() {
       <div class="epic-meta">
         <div v-if="deps.length" class="meta-group">
           <span class="meta-label">Depends on</span>
-          <button v-for="d in deps" :key="d.id" class="meta-chip" @click="goToEpic(d.id)">
+          <button
+            v-for="d in deps"
+            :key="d.id"
+            class="meta-chip"
+            :title="needsFor(d.id) || undefined"
+            @click="goToEpic(d.id)"
+          >
             {{ d.id }} · {{ d.title }}
+            <span v-if="needsFor(d.id)" class="meta-needs">— {{ needsFor(d.id) }}</span>
           </button>
         </div>
         <div v-if="epic.requirements?.length" class="meta-group">
@@ -118,5 +134,14 @@ function openEpicsDoc() {
 .board-empty {
   display: flex; align-items: center; justify-content: center; height: 100%;
   color: var(--text-2); font-size: 0.9rem;
+}
+
+.meta-needs {
+  color: var(--text-2);
+  font-weight: 400;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

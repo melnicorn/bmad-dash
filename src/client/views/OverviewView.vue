@@ -19,22 +19,36 @@
         </div>
         <div class="card">
           <div class="card-value">{{ allStories.length }}</div>
-          <div class="card-label">Stories</div>
+          <div class="card-label">{{ store.isTicketLayout ? 'Tickets' : 'Stories' }}</div>
         </div>
-        <div class="card">
-          <div class="card-value">{{ acDone }} / {{ acTotal }}</div>
-          <div class="card-label">ACs Done</div>
-        </div>
-        <div class="card">
-          <div class="card-value">{{ taskDone }} / {{ taskTotal }}</div>
-          <div class="card-label">Tasks Done</div>
-        </div>
+        <!-- A ticket's acceptance lives in its plan, so AC/task tiles would
+             always read 0/0; the ready/blocked split is the useful pair. -->
+        <template v-if="store.isTicketLayout">
+          <div class="card">
+            <div class="card-value">{{ store.ticketSummary?.readyToStart.length ?? 0 }}</div>
+            <div class="card-label">Ready to Start</div>
+          </div>
+          <div class="card">
+            <div class="card-value">{{ store.ticketSummary?.blocked.length ?? 0 }}</div>
+            <div class="card-label">Blocked</div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="card">
+            <div class="card-value">{{ acDone }} / {{ acTotal }}</div>
+            <div class="card-label">ACs Done</div>
+          </div>
+          <div class="card">
+            <div class="card-value">{{ taskDone }} / {{ taskTotal }}</div>
+            <div class="card-label">Tasks Done</div>
+          </div>
+        </template>
       </div>
     </div>
 
     <!-- Story Status -->
     <div class="section">
-      <div class="section-title">Story Status</div>
+      <div class="section-title">{{ store.isTicketLayout ? 'Ticket Status' : 'Story Status' }}</div>
       <div class="status-rows">
         <div
           v-for="s in STATUSES"
@@ -83,7 +97,7 @@
             :style="{ color: `var(${row.statusColor})` }"
           >{{ row.status }}</span>
           <span class="epic-title">{{ row.title }}</span>
-          <span class="epic-story-count">{{ row.total }} stories</span>
+          <span class="epic-story-count">{{ row.total }} {{ store.isTicketLayout ? 'tickets' : 'stories' }}</span>
           <span class="epic-pct-text">{{ row.pct }}%</span>
           <div class="epic-bar-track">
             <div
@@ -99,7 +113,7 @@
     <div class="section">
       <div class="section-title">Commit Coverage</div>
       <p class="coverage-text">
-        {{ storiesWithCommits }} of {{ allStories.length }} stories have mapped commits
+        {{ storiesWithCommits }} of {{ allStories.length }} {{ store.isTicketLayout ? 'tickets' : 'stories' }} have mapped commits
         <span class="coverage-pct">({{ commitCoveragePct }}%)</span>
       </p>
       <div class="coverage-bar-track" v-if="allStories.length > 0">
